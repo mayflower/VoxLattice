@@ -5,7 +5,7 @@ services:
     build:
       context: ..
       dockerfile: services/fastenhancer-server/Dockerfile
-    image: voxlattice:0.1.0
+    image: "${VOXLATTICE_IMAGE:-voxlattice:0.1.0}"
     restart: unless-stopped
     environment:
       ALLOW_INSECURE_GRPC: "true"
@@ -52,7 +52,7 @@ services:
 
   smoke:
     profiles: [test]
-    image: voxlattice:0.1.0
+    image: "${VOXLATTICE_IMAGE:-voxlattice:0.1.0}"
     depends_on:
       fastenhancer:
         condition: service_healthy

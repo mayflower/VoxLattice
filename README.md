@@ -3,6 +3,7 @@
 [![CI](https://github.com/mayflower/VoxLattice/actions/workflows/ci.yml/badge.svg)](https://github.com/mayflower/VoxLattice/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/mayflower/VoxLattice/actions/workflows/codeql.yml/badge.svg)](https://github.com/mayflower/VoxLattice/actions/workflows/codeql.yml)
 [![Security](https://github.com/mayflower/VoxLattice/actions/workflows/security.yml/badge.svg)](https://github.com/mayflower/VoxLattice/actions/workflows/security.yml)
+[![CUDA container](https://github.com/mayflower/VoxLattice/actions/workflows/container.yml/badge.svg)](https://github.com/mayflower/VoxLattice/actions/workflows/container.yml)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/mayflower/VoxLattice/badge)](https://securityscorecards.dev/viewer/?uri=github.com/mayflower/VoxLattice)
 [![License: MIT](https://img.shields.io/github/license/mayflower/VoxLattice)](LICENSE)
 [![Python 3.12–3.13](https://img.shields.io/badge/Python-3.12%E2%80%933.13-3776AB?logo=python&logoColor=white)](https://www.python.org/)
@@ -26,6 +27,7 @@ when the service is unavailable.
 - Bounded queues, backpressure, health checks, Prometheus metrics, and graceful shutdown
 - Bearer authentication, TLS, and optional mutual TLS
 - Reproducible model download with pinned provenance and SHA-256 verification
+- Published `linux/amd64` CUDA image with SBOM and signed build provenance
 - Docker Compose setup, gRPC client, LiveKit Agent example, and load benchmark
 
 ## Current scope
@@ -36,6 +38,25 @@ The included server uses the pinned FastEnhancer-B VCTK-Demand checkpoint.
 
 No particular GPU model is required. Capacity and latency depend on the chosen
 GPU and workload, so benchmark the target system before production use.
+
+## Quick start with the published image
+
+Install the NVIDIA Container Toolkit, clone the repository for its Compose
+configuration, and create `deploy/.env` as described below. Then set:
+
+```dotenv
+VOXLATTICE_IMAGE=ghcr.io/mayflower/voxlattice:latest
+```
+
+Start the published image without a local build:
+
+```bash
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml pull fastenhancer
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --no-build --wait
+```
+
+Release images are also available under their full version and immutable Git
+SHA tags. Use a version tag instead of `latest` for reproducible deployments.
 
 ## Quick start from source
 

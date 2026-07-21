@@ -51,6 +51,31 @@ leaving a container running, use `make compose-test`.
 The base Compose file enables plaintext gRPC and binds both ports to localhost.
 It is intended for development and single-host use only.
 
+## Published container image
+
+Stable releases publish a `linux/amd64` CUDA image to
+`ghcr.io/mayflower/voxlattice`. Set the image in `deploy/.env`:
+
+```dotenv
+VOXLATTICE_IMAGE=ghcr.io/mayflower/voxlattice:latest
+```
+
+Then pull and start it without building locally:
+
+```bash
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml pull fastenhancer
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --no-build --wait
+```
+
+Production deployments should replace `latest` with a full release version or
+immutable `sha-<40-character commit>` tag. Published images include an SBOM and
+signed provenance attestation. Verify provenance with GitHub CLI:
+
+```bash
+gh attestation verify oci://ghcr.io/mayflower/voxlattice:<tag> \
+  --repo mayflower/VoxLattice
+```
+
 ## TLS deployment
 
 For server-authenticated TLS, set the host paths in `deploy/.env`:
