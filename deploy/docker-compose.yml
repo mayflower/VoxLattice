@@ -11,21 +11,25 @@ services:
       ALLOW_INSECURE_GRPC: "true"
       FASTENHANCER_API_TOKEN_FILE: /run/secrets/fastenhancer_api_token
       CUDA_DEVICE: cuda:0
-      REQUIRED_CUDA_DEVICE_NAME: NVIDIA RTX A6000
-      MAX_ACTIVE_STREAMS: "128"
-      MAX_BATCH_SIZE: "32"
-      MAX_BATCH_WAIT_MS: "1"
+      MAX_ACTIVE_STREAMS: "${MAX_ACTIVE_STREAMS:-128}"
+      MAX_BATCH_SIZE: "${MAX_BATCH_SIZE:-32}"
+      MAX_BATCH_WAIT_MS: "${MAX_BATCH_WAIT_MS:-1}"
+      MAX_PENDING_AUDIO_MS_PER_STREAM: "${MAX_PENDING_AUDIO_MS_PER_STREAM:-500}"
+      MAX_OUTPUT_AUDIO_MS_PER_STREAM: "${MAX_OUTPUT_AUDIO_MS_PER_STREAM:-500}"
+      STREAM_IDLE_TIMEOUT_S: "${STREAM_IDLE_TIMEOUT_S:-30}"
+      MAX_AUDIO_CHUNK_SAMPLES: "${MAX_AUDIO_CHUNK_SAMPLES:-16000}"
+      GRACEFUL_SHUTDOWN_S: "${GRACEFUL_SHUTDOWN_S:-10}"
     secrets:
       - fastenhancer_api_token
     ports:
-      - "127.0.0.1:${FASTENHANCER_GRPC_PORT:-50051}:50051"
-      - "127.0.0.1:${FASTENHANCER_HTTP_PORT:-8080}:8080"
+      - "${FASTENHANCER_GRPC_BIND_ADDRESS:-127.0.0.1}:${FASTENHANCER_GRPC_PORT:-50051}:50051"
+      - "${FASTENHANCER_HTTP_BIND_ADDRESS:-127.0.0.1}:${FASTENHANCER_HTTP_PORT:-8080}:8080"
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ["GPU-bac67bca-195d-3490-88f0-b8a3453c5929"]
+              device_ids: ["${FASTENHANCER_GPU_DEVICE_ID:?set FASTENHANCER_GPU_DEVICE_ID to the GPU UUID or index to use}"]
               capabilities: [gpu]
     read_only: true
     tmpfs:

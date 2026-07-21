@@ -16,8 +16,9 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-A6000_UUID = "GPU-bac67bca-195d-3490-88f0-b8a3453c5929"
-os.environ.setdefault("CUDA_VISIBLE_DEVICES", A6000_UUID)
+GPU_DEVICE_ID = os.environ.get("FASTENHANCER_GPU_DEVICE_ID", "")
+if GPU_DEVICE_ID:
+    os.environ.setdefault("CUDA_VISIBLE_DEVICES", GPU_DEVICE_ID)
 
 import torch  # noqa: E402 -- device visibility must be restricted before importing CUDA
 
@@ -44,6 +45,8 @@ def sha256(path: Path) -> str | None:
 
 
 def main() -> int:
+    if not GPU_DEVICE_ID:
+        raise ValueError("FASTENHANCER_GPU_DEVICE_ID is required")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--metrics-url", default="http://127.0.0.1:8080/metrics")
@@ -56,7 +59,6 @@ def main() -> int:
         {
             "torch_index": index,
             "name": torch.cuda.get_device_name(index),
-            "uuid": str(torch.cuda.get_device_properties(index).uuid),
         }
         for index in range(torch.cuda.device_count())
     ]
@@ -69,7 +71,7 @@ def main() -> int:
         "torch_cuda": torch.version.cuda,
         "cuda_available": torch.cuda.is_available(),
         "gpus": gpus,
-        "selected_gpu": next((gpu for gpu in gpus if gpu["name"] == "NVIDIA RTX A6000"), None),
+        "selected_gpu": gpus[0] if len(gpus) == 1 else None,
         "docker_server": command(["docker", "version", "--format", "{{.Server.Version}}"]),
     }
     (output / "environment.json").write_text(json.dumps(environment, indent=2) + "\n")
@@ -85,8 +87,8 @@ def main() -> int:
         [
             "nvidia-smi",
             "-i",
-            A6000_UUID,
-            "--query-gpu=index,uuid,name,driver_version,memory.total",
+            GPU_DEVICE_ID,
+            "--query-gpu=index,name,driver_version,memory.total",
             "--format=csv",
         ]
     )
@@ -119,14 +121,14 @@ def main() -> int:
         (output / "tests.txt").write_text("not requested; run with --run-tests\n")
     summary = {
         "output": str(output),
-        "a6000_selected": environment["selected_gpu"] is not None,
+        "gpu_selected": environment["selected_gpu"] is not None,
         "model_verified": model["checkpoint_sha256"] == manifest["checkpoint_sha256"],
         "compose_config_verified": compose_config["returncode"] == 0,
         "docker_verified": docker_inspect["returncode"] == 0,
         "tests_verified": tests_verified,
     }
     required = (
-        summary["a6000_selected"],
+        summary["gpu_selected"],
         summary["model_verified"],
         summary["compose_config_verified"],
         summary["docker_verified"],

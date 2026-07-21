@@ -1,78 +1,142 @@
 # VoxLattice
 
-VoxLattice is an open-source, CUDA-only voice-isolation service for live audio.
-It provides a FastEnhancer-B gRPC server and
-`livekit-plugins-fastenhancer`, a track-local LiveKit
-`FrameProcessor[AudioFrame]`. The wire and audio contract is deliberately
-narrow: 16,000 Hz, mono, signed PCM16 little-endian, with 256-sample model
-hops and 256 samples (16 ms) of algorithmic delay.
+[![CI](https://github.com/mayflower/VoxLattice/actions/workflows/ci.yml/badge.svg)](https://github.com/mayflower/VoxLattice/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/mayflower/VoxLattice/actions/workflows/codeql.yml/badge.svg)](https://github.com/mayflower/VoxLattice/actions/workflows/codeql.yml)
+[![Security](https://github.com/mayflower/VoxLattice/actions/workflows/security.yml/badge.svg)](https://github.com/mayflower/VoxLattice/actions/workflows/security.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/mayflower/VoxLattice/badge)](https://securityscorecards.dev/viewer/?uri=github.com/mayflower/VoxLattice)
+[![License: MIT](https://img.shields.io/github/license/mayflower/VoxLattice)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 
-The VoxLattice name covers the repository and container. Existing Python
-distribution names, imports, and the `fastenhancer.v1` protocol remain stable.
+VoxLattice is a self-hosted, CUDA-accelerated voice-isolation service for live
+audio. It combines a streaming FastEnhancer-B inference server with a LiveKit
+`FrameProcessor` plugin.
 
-The server loads one official VCTK-Demand Base checkpoint and micro-batches
-the next dependent hop from different streams. STFT, iSTFT, and all three GRU
-caches remain isolated per RPC. Production startup rejects CPU execution and,
-for this deployment, rejects every CUDA device except the NVIDIA RTX A6000.
+The server keeps model state isolated per audio stream and batches work across
+concurrent streams on one GPU. The plugin maintains a persistent bidirectional
+gRPC stream per LiveKit track and falls back to the time-aligned original audio
+when the service is unavailable.
 
-## Quickstart
+> VoxLattice is alpha software. The wire protocol is versioned, but operational
+> defaults and Python APIs may still evolve before 1.0.
 
-Prerequisites are Python 3.12, `uv`, Docker Compose, NVIDIA driver 550 or
-compatible, and NVIDIA Container Toolkit. This checkout is locked to A6000 UUID
-`GPU-bac67bca-195d-3490-88f0-b8a3453c5929`; update the Compose device ID only
-as an intentional deployment change while retaining the name check.
+## Features
+
+- One CUDA model instance serving multiple independent audio streams
+- Exact input/output sample accounting and a fixed 16 ms algorithmic delay
+- Bounded queues, backpressure, health checks, Prometheus metrics, and graceful shutdown
+- Bearer authentication, TLS, and optional mutual TLS
+- Reproducible model download with pinned provenance and SHA-256 verification
+- Docker Compose setup, gRPC client, LiveKit Agent example, and load benchmark
+
+## Current scope
+
+VoxLattice accepts 16 kHz, mono, signed 16-bit little-endian PCM. Inference
+requires a compatible NVIDIA CUDA GPU; there is no production CPU fallback.
+The included server uses the pinned FastEnhancer-B VCTK-Demand checkpoint.
+
+No particular GPU model is required. Capacity and latency depend on the chosen
+GPU and workload, so benchmark the target system before production use.
+
+## Quick start from source
+
+Prerequisites:
+
+- Git, Python 3.12, Docker, and Docker Compose
+- NVIDIA driver and [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+- An NVIDIA GPU visible in `nvidia-smi`
+
+Clone the repository:
 
 ```bash
-make bootstrap
-make check
-make test
-make test-integration
-make model
-export FASTENHANCER_API_TOKEN="$(openssl rand -hex 32)"
-make image
-make up
-make smoke
-make test-gpu
-make benchmark BENCH_TARGET_STREAMS=16
-make down
+git clone https://github.com/mayflower/VoxLattice.git
+cd VoxLattice
 ```
 
-For a self-contained local Compose test, generate a checkout-local secret and
-run the one-shot test profile:
+Create the local configuration and inspect the available GPUs:
 
 ```bash
-printf 'FASTENHANCER_API_TOKEN=%s\n' "$(openssl rand -hex 32)" > deploy/.env
+cp deploy/.env.example deploy/.env
+nvidia-smi -L
+```
+
+Edit `deploy/.env` and set at least:
+
+```dotenv
+FASTENHANCER_API_TOKEN=<random value with at least 16 characters>
+FASTENHANCER_GPU_DEVICE_ID=<GPU UUID or index from nvidia-smi -L>
+```
+
+For example, `openssl rand -hex 32` produces a suitable local token. Then run
+the self-contained build and smoke test:
+
+```bash
 make compose-test
 ```
 
-This prepares the verified model, builds the image, waits for the A6000 server
-to become healthy, runs a synthetic one-second bidi-gRPC stream from the
-Compose network, verifies exact input/output sample counts and offsets, and
-then removes the test containers. The server ports remain bound only to
-localhost and use ephemeral host ports during this one-shot test, avoiding
-collisions with existing local services. `deploy/.env` is ignored by Git;
-remove it when finished. For a long-running `make up`, the defaults remain
-`127.0.0.1:50051` and `127.0.0.1:8080`; override
-`FASTENHANCER_GRPC_PORT` or `FASTENHANCER_HTTP_PORT` if needed.
+This downloads and verifies the official model asset, builds the container,
+starts it on the selected GPU, sends a synthetic audio stream, checks exact
+sample counts, and removes the containers again.
 
-The image never downloads weights. `make model` verifies the GitHub asset ID,
-archive size/hash, member names, and checkpoint/config hashes before the Docker
-build copies them. Plaintext gRPC in Compose binds only to localhost. Configure
-the TLS variables documented in [operations](docs/operations.md) for any
-distributed deployment.
+## Run the service
 
-## LiveKit
+After configuring `deploy/.env`, one command prepares the verified model,
+builds the image, starts the service, and waits for readiness:
+
+```bash
+make up
+```
+
+The default endpoints are available only on the local host:
+
+- gRPC: `127.0.0.1:50051`
+- liveness: `http://127.0.0.1:8080/healthz`
+- readiness: `http://127.0.0.1:8080/readyz`
+- Prometheus metrics: `http://127.0.0.1:8080/metrics`
+
+Process a WAV file with the included client. The command reads the API token
+and port from `deploy/.env`:
+
+```bash
+make enhance INPUT=input.wav OUTPUT=enhanced.wav
+```
+
+The client accepts PCM16 WAV input and converts its channel count and sample
+rate to the service contract. It requires the optional local `uv` environment;
+run `make bootstrap` once before using `make enhance`. Stop the service with
+`make down`.
+
+For remote access, configure TLS and intentionally change the gRPC bind
+address. Do not expose the plaintext local Compose configuration to a network.
+See [Operations](docs/operations.md) and [Configuration](docs/configuration.md).
+
+## Install the LiveKit plugin
+
+Install the plugin and its protocol package directly from GitHub:
+
+```bash
+python -m pip install \
+  "fastenhancer-protocol @ git+https://github.com/mayflower/VoxLattice.git@main#subdirectory=generated" \
+  "livekit-plugins-fastenhancer @ git+https://github.com/mayflower/VoxLattice.git@main#subdirectory=packages/livekit-plugins-fastenhancer"
+```
+
+With `uv`, use the same two requirement strings with `uv add`. Pin a release tag
+instead of `main` when deploying a released version.
+
+## Add it to a LiveKit Agent
+
+Create one processor per input track and pass it as LiveKit's noise-cancellation
+processor:
 
 ```python
 import os
 
 from livekit.agents import room_io
-from livekit.plugins import fastenhancer
+from livekit.plugins.fastenhancer import RemoteFastEnhancer
 
-processor = fastenhancer.RemoteFastEnhancer(
-    endpoint="dns:///fastenhancer:50051",
+processor = RemoteFastEnhancer(
+    endpoint="dns:///fastenhancer.example.com:50051",
     api_key=os.environ["FASTENHANCER_API_TOKEN"],
-    tls=False,  # local Compose network only
+    tls=True,
 )
 
 room_options = room_io.RoomOptions(
@@ -86,48 +150,37 @@ room_options = room_io.RoomOptions(
 )
 ```
 
-Create a fresh processor for every participant track. See the selector in
-`examples/livekit-agent/agent.py`. Acoustic echo cancellation may remain at the
-capture edge, but disable browser/agent neural noise suppression so two heavy
-denoisers are not stacked.
+For multi-participant rooms, use a selector that creates a fresh processor for
+each track. The complete example, certificate options, buffering parameters,
+and lifecycle behavior are documented in [LiveKit integration](docs/livekit.md).
 
-On remote failure, output remains delayed by the model contract and falls open
-to raw audio for the exact same absolute sample interval. Late remote output is
-discarded. Abrupt track close cannot return the final delayed 256 samples
-because `FrameProcessor._close()` has no frame return value; a following silence
-frame exposes that final speech hop during normal continuous operation.
+## Documentation
 
-## Capacity and latency
+- [Configuration reference](docs/configuration.md)
+- [Operations and TLS deployment](docs/operations.md)
+- [LiveKit integration](docs/livekit.md)
+- [Architecture](docs/architecture.md)
+- [gRPC protocol and audio timeline](docs/protocol.md)
+- [Benchmarking and capacity planning](docs/benchmarking.md)
+- [Security and privacy](docs/security.md)
+- [Model provenance](models/README.md)
+- [Contributing](CONTRIBUTING.md)
 
-Do not copy a stream count from another GPU. Run `make benchmark` on the target
-A6000 and use its JSON/Markdown artifact. Gates are controlled by
-`BENCH_MAX_SERVER_P95_MS`, `BENCH_MAX_RTT_P95_MS`,
-`BENCH_MAX_FALLBACK_RATIO`, and `BENCH_MAX_ERROR_RATIO`. A failed gate exits
-nonzero; the tool never substitutes or invents measurements.
+## Community and support
 
-The fixed algorithmic delay is 16 ms. Queueing, batching, transport, and plugin
-wait time are additional and are reported independently. See
-[architecture](docs/architecture.md), [protocol](docs/protocol.md), and
-[benchmarking](docs/benchmarking.md).
+Use [GitHub issues](https://github.com/mayflower/VoxLattice/issues) for
+reproducible bugs and focused feature requests. Read [SUPPORT.md](SUPPORT.md)
+for the diagnostic information to include. Contributions are welcome under the
+[Code of Conduct](CODE_OF_CONDUCT.md).
 
-## Community and security
+Do not report suspected vulnerabilities publicly; follow the private process in
+[SECURITY.md](SECURITY.md).
 
-Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), follow
-the [Code of Conduct](CODE_OF_CONDUCT.md), and use the repository issue
-templates for reproducible bugs and scoped feature proposals. General usage
-questions are covered by [SUPPORT.md](SUPPORT.md).
+## License
 
-Do not disclose suspected vulnerabilities in a public issue. Follow the
-private-first process in [SECURITY.md](SECURITY.md). Project decisions and
-maintainer responsibilities are described in [GOVERNANCE.md](GOVERNANCE.md).
+VoxLattice is licensed under the [MIT License](LICENSE). Vendored code, model
+assets, and runtime dependencies retain their respective licenses; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-## License and independence
-
-VoxLattice source code is licensed under the [MIT License](LICENSE).
-Vendored code, model assets, and runtime dependencies retain their respective
-licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the vendored
-license files.
-
-VoxLattice is an independent community project. It is not affiliated with or
-endorsed by LiveKit, NVIDIA, or the FastEnhancer authors. Those names and any
-related marks belong to their respective owners.
+VoxLattice is an independent project and is not affiliated with or endorsed by
+LiveKit, NVIDIA, or the FastEnhancer authors.

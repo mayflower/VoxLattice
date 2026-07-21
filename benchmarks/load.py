@@ -25,7 +25,7 @@ from livekit.plugins.fastenhancer import RemoteFastEnhancer
 
 HOP_SAMPLES = 256
 HOP_SECONDS = HOP_SAMPLES / 16_000
-A6000_UUID = "GPU-bac67bca-195d-3490-88f0-b8a3453c5929"
+GPU_DEVICE_ID = os.environ.get("FASTENHANCER_GPU_DEVICE_ID", "")
 
 
 def percentile(values: list[float], quantile: float) -> float:
@@ -260,19 +260,18 @@ def gpu_telemetry() -> dict[str, Any]:
     command = [
         "nvidia-smi",
         "-i",
-        A6000_UUID,
-        "--query-gpu=uuid,name,utilization.gpu,memory.used,memory.total",
+        GPU_DEVICE_ID,
+        "--query-gpu=name,utilization.gpu,memory.used,memory.total",
         "--format=csv,noheader,nounits",
     ]
     result = subprocess.run(command, check=False, capture_output=True, text=True)  # noqa: S603
     if result.returncode:
         return {"available": False, "error": result.stderr.strip()}
-    uuid, name, utilization, memory_used, memory_total = [
+    name, utilization, memory_used, memory_total = [
         value.strip() for value in result.stdout.strip().split(",")
     ]
     return {
         "available": True,
-        "uuid": uuid,
         "name": name,
         "utilization_percent": float(utilization),
         "memory_used_mib": float(memory_used),
@@ -291,12 +290,10 @@ async def gpu_telemetry_during_load(stop: asyncio.Event) -> dict[str, Any]:
         except TimeoutError:
             continue
     valid = [sample for sample in samples if sample.get("available")]
-    identities = {(sample.get("uuid"), sample.get("name")) for sample in valid}
-    expected_identity = (A6000_UUID, "NVIDIA RTX A6000")
+    names = {sample.get("name") for sample in valid}
     return {
-        "available": len(valid) == len(samples) and identities == {expected_identity},
+        "available": len(valid) == len(samples) and len(names) == 1,
         "sample_count": len(samples),
-        "uuid": valid[0]["uuid"] if valid else None,
         "name": valid[0]["name"] if valid else None,
         "utilization_percent": {
             "mean": (
@@ -393,6 +390,8 @@ async def benchmark_level(
 
 
 async def main() -> int:
+    if not GPU_DEVICE_ID:
+        raise ValueError("FASTENHANCER_GPU_DEVICE_ID is required")
     endpoint = os.environ.get("BENCH_ENDPOINT", "127.0.0.1:50051")
     metrics_url = os.environ.get("BENCH_METRICS_URL", "http://127.0.0.1:8080/metrics")
     token = os.environ.get("FASTENHANCER_API_TOKEN")
@@ -443,15 +442,11 @@ async def main() -> int:
         if result["error_ratio"] > thresholds["error_ratio"]:
             failures.append(f"{result['streams']} streams exceeded error gate")
         if not result["gpu_during_load"]["available"]:
-            failures.append(f"{result['streams']} streams failed A6000 load telemetry")
+            failures.append(f"{result['streams']} streams failed GPU load telemetry")
     if probe["fallback_ratio"] > thresholds["fallback_ratio"]:
         failures.append("plugin raw fallback gate failed")
-    if (
-        not gpu.get("available")
-        or gpu.get("uuid") != A6000_UUID
-        or gpu.get("name") != "NVIDIA RTX A6000"
-    ):
-        failures.append("A6000 telemetry gate failed")
+    if not gpu.get("available"):
+        failures.append("GPU telemetry gate failed")
     report = {
         "created_at": datetime.now(UTC).isoformat(),
         "endpoint": endpoint,

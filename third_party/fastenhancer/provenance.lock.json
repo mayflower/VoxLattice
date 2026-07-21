@@ -2,16 +2,16 @@
   "upstream_commit": "49ab55a57e3a064d94c6412cd0f0a383a55ca0f8",
   "files": {
     "LICENSE": {
-      "upstream_sha256": "9e5366f7161eb00afe39c484b76bdcf527cc69413170e70d8a8dd5b11e580206",
-      "vendored_sha256": "9e5366f7161eb00afe39c484b76bdcf527cc69413170e70d8a8dd5b11e580206"
+      "upstream_sha256": "38164c22720cdccceb5f0dbb8f7218dcf17bac97ac536cad2e77c33dfbc45a18",
+      "vendored_sha256": "38164c22720cdccceb5f0dbb8f7218dcf17bac97ac536cad2e77c33dfbc45a18"
     },
     "functional/audio_modules.py": {
       "upstream_sha256": "6d474b3f2869182339b9f1d9f34c2076099e8ad7b1779c142cfd1b50a5acf8ae",
-      "vendored_sha256": "9caa35ca33aaaf8170665a84a438520acc922bdb2d164c43f5671495cad275a7"
+      "vendored_sha256": "a22f85e0c015b798a2eb5fb7ff8fc8055d0d015c0ad70f6f9eb62edd139bd702"
     },
     "models/fastenhancer/default/model.py": {
       "upstream_sha256": "0e9b1ac34fe1725f7a09f53260b630360c38f8f185052bb37127e34957ec3380",
-      "vendored_sha256": "8af530decbb9b12b96c78859b5c0625f2502460ed8d5c34c728808217d9b3395"
+      "vendored_sha256": "ff9ca46d6a5b8ed538cce76d6830779533bd4c720bf0a877525817d90c028a82"
     }
   }
 }

@@ -8,27 +8,63 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: cpu-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
+    name: Python ${{ matrix.python }} quality
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     strategy:
       matrix:
         python: ["3.12"]
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6
         with:
           version: "0.11.7"
           python-version: ${{ matrix.python }}
           enable-cache: true
       - run: uv sync --all-packages --dev --frozen
+      - name: Verify dependency lock
+        run: uv lock --check
+      - name: Lint GitHub Actions workflows
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            --output /tmp/actionlint.tar.gz
+          echo "${ACTIONLINT_SHA256}  /tmp/actionlint.tar.gz" | sha256sum --check
+          tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
+          /tmp/actionlint -config-file .github/actionlint.yaml .github/workflows/*.yml
+      - name: Validate local Compose configuration
+        env:
+          FASTENHANCER_API_TOKEN: ci-compose-validation-token
+          FASTENHANCER_GPU_DEVICE_ID: GPU-ci-placeholder
+        run: docker compose -f deploy/docker-compose.yml --profile test config --quiet
+      - name: Validate TLS Compose overlays
+        env:
+          FASTENHANCER_API_TOKEN: ci-compose-validation-token
+          FASTENHANCER_GPU_DEVICE_ID: GPU-ci-placeholder
+          FASTENHANCER_TLS_CERTIFICATE: /tmp/server.crt
+          FASTENHANCER_TLS_PRIVATE_KEY: /tmp/server.key
+          FASTENHANCER_TLS_CLIENT_CA: /tmp/client-ca.crt
+        run: >-
+          docker compose
+          -f deploy/docker-compose.yml
+          -f deploy/docker-compose.tls.yml
+          -f deploy/docker-compose.mtls.yml
+          config --quiet
       - run: make check
       - run: make test
       - run: make test-integration
-      - run: uv run python -m build generated
-      - run: uv run python -m build third_party/fastenhancer
-      - run: uv run python -m build packages/livekit-plugins-fastenhancer
-      - run: uv run python -m build services/fastenhancer-server
+      - run: make wheels
       - name: Wheel import in clean environment
         run: |
           uv venv --clear /tmp/wheel-test

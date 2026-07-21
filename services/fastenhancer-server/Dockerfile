@@ -1,17 +1,20 @@
 # syntax=docker/dockerfile:1.7
 ARG PYTHON_IMAGE=python:3.12.12-slim-bookworm@sha256:2986c55feb36e6cae00fa1fefb454283e4b33f35e75ff8bdd123b134130be301
 
+# PYTHON_IMAGE is pinned by both version and digest above.
+# hadolint ignore=DL3006
 FROM ${PYTHON_IMAGE} AS builder
 ARG UV_VERSION=0.11.7
 WORKDIR /src
 RUN python -m pip install --no-cache-dir "uv==${UV_VERSION}"
-COPY pyproject.toml uv.lock .python-version ./
+COPY pyproject.toml uv.lock .python-version README.md ./
 COPY generated ./generated
 COPY third_party ./third_party
 COPY services/fastenhancer-server ./services/fastenhancer-server
 COPY packages/livekit-plugins-fastenhancer ./packages/livekit-plugins-fastenhancer
 RUN uv sync --package fastenhancer-server --no-dev --frozen --no-editable
 
+# hadolint ignore=DL3006
 FROM ${PYTHON_IMAGE} AS runtime
 ENV PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
@@ -19,8 +22,7 @@ ENV PATH=/opt/venv/bin:$PATH \
     MODEL_CHECKPOINT=/opt/model/00500.pth \
     MODEL_CONFIG=/opt/model/config.yaml \
     MODEL_MANIFEST=/opt/model/manifest.lock.json \
-    CUDA_DEVICE=cuda:0 \
-    REQUIRED_CUDA_DEVICE_NAME="NVIDIA RTX A6000"
+    CUDA_DEVICE=cuda:0
 RUN groupadd --system --gid 65532 fastenhancer \
     && useradd --system --uid 65532 --gid 65532 --home-dir /nonexistent --shell /usr/sbin/nologin fastenhancer
 COPY --from=builder /src/.venv /opt/venv

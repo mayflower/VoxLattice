@@ -116,7 +116,6 @@ class FastEnhancerBStreamingModel:
         manifest_path: Path,
         config_path: Path,
         cuda_device: str = "cuda:0",
-        required_device_name: str = "NVIDIA RTX A6000",
     ) -> None:
         if not torch.cuda.is_available():
             raise RuntimeError("CUDA is required; CPU production inference is forbidden")
@@ -126,10 +125,6 @@ class FastEnhancerBStreamingModel:
         if self.device.index >= torch.cuda.device_count():
             raise RuntimeError(f"configured CUDA device does not exist: {self.device}")
         self.cuda_device_name = torch.cuda.get_device_name(self.device)
-        if self.cuda_device_name != required_device_name:
-            raise RuntimeError(
-                f"configured device is {self.cuda_device_name!r}; required {required_device_name!r}"
-            )
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         self._validate_manifest(manifest)
         actual_hash = _sha256(checkpoint_path)

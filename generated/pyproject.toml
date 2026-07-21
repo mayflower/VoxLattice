@@ -2,15 +2,23 @@
 name = "fastenhancer-protocol"
 version = "0.1.0"
 description = "Generated gRPC protocol bindings used by VoxLattice"
+readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.12,<3.13"
 dependencies = ["grpcio==1.70.0", "protobuf==5.29.6"]
+keywords = ["audio", "grpc", "protobuf", "voxlattice"]
+
 classifiers = [
   "Development Status :: 3 - Alpha",
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3.12",
 ]
+
+[project.urls]
+Documentation = "https://github.com/mayflower/VoxLattice/blob/main/docs/protocol.md"
+Issues = "https://github.com/mayflower/VoxLattice/issues"
+Source = "https://github.com/mayflower/VoxLattice"
 
 [build-system]
 requires = ["hatchling==1.27.0"]

@@ -25,7 +25,6 @@ def settings(token: str) -> ServerSettings:
         manifest_path=Path("unused"),
         model_config_path=Path("unused"),
         cuda_device="cuda:0",
-        required_device_name="NVIDIA RTX A6000",
         api_token=token,
         allow_insecure=True,
         tls_certificate=None,

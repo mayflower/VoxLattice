@@ -35,14 +35,17 @@ def test_container_runs_module_and_models_are_world_readable() -> None:
     assert "models/manifest.lock.json /opt/model/manifest.lock.json" in dockerfile
 
 
-def test_local_compose_smoke_profile_is_a6000_only() -> None:
+def test_local_compose_smoke_profile_selects_an_explicit_gpu() -> None:
     compose = yaml.safe_load((ROOT / "deploy/docker-compose.yml").read_text())
     services = compose["services"]
     devices = services["fastenhancer"]["deploy"]["resources"]["reservations"]["devices"]
     assert devices == [
         {
             "driver": "nvidia",
-            "device_ids": ["GPU-bac67bca-195d-3490-88f0-b8a3453c5929"],
+            "device_ids": [
+                "${FASTENHANCER_GPU_DEVICE_ID:?set FASTENHANCER_GPU_DEVICE_ID "
+                "to the GPU UUID or index to use}"
+            ],
             "capabilities": ["gpu"],
         }
     ]

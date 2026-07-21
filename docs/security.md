@@ -1,38 +1,87 @@
 # Security and privacy
 
-The container runs UID/GID 65532, drops Linux capabilities, enables
-no-new-privileges, uses a read-only root filesystem and bounded tmpfs, and
-contains neither Git nor build toolchain from the builder stage. Model and
-manifest are immutable image inputs and are rehashed at process startup.
+VoxLattice processes live PCM in memory and is designed to avoid persisting or
+observing audio content. Operators are still responsible for securing the host,
+GPU runtime, network, certificates, tokens, metrics endpoint, and surrounding
+LiveKit deployment.
 
-There is no working default secret. Bearer comparison is constant-time. TLS is
-mandatory unless insecure transport is explicitly enabled for a local isolated
-network; a client CA enables mTLS. RPC message sizes, active streams, metadata,
-per-stream buffers, output queues, and idle time are bounded.
+Report suspected vulnerabilities privately according to
+[`SECURITY.md`](../SECURITY.md).
 
-Audio bytes are never logged, traced, stored, placed in exceptions, or attached
-to metric labels. Structured logs contain lifecycle/error classes only. The
-LiveKit example passes `record=False` so Agents observability does not upload
-audio. Disable core dumps in the deployment runtime if the surrounding platform
-enables them.
+## Deployment checklist
 
-CI audits Python dependencies, scans the built container, generates an SBOM,
-and checks that normal tests use no model/network downloads. Release artifacts
-must include `THIRD_PARTY_NOTICES.md` and the vendored MIT license.
+- Use TLS for every connection beyond localhost or an isolated private network.
+- Use mTLS when clients also need certificate-based identity.
+- Generate a unique bearer token, mount it through a secret manager, and rotate
+  it when access changes.
+- Keep the health and Prometheus HTTP port private.
+- Retain the container's read-only filesystem, dropped capabilities,
+  `no-new-privileges`, non-root user, and bounded tmpfs.
+- Restrict which workloads and users can access the selected GPU and Docker
+  socket.
+- Disable core dumps if the surrounding platform enables them.
+- Keep VoxLattice, its base image, NVIDIA runtime, and host packages updated.
 
-## Dependency-audit exceptions
+The local Compose file intentionally enables plaintext gRPC but binds it to
+`127.0.0.1`. Use the TLS overlays or an equivalent orchestrator configuration
+before changing that bind address.
 
-`make audit` is fail-closed except for these reviewed PyTorch 2.10.0 findings:
+## Authentication and transport
 
-- `PYSEC-2026-139` concerns local PT2 artifact loading and has no published
-  fixed release. This service never loads PT2 packages or invokes
-  `torch.compile`; it loads one SHA-256-pinned upstream state dictionary with
-  `weights_only=True`.
-- `PYSEC-2025-194` concerns local `torch.jit.script` memory corruption. The
-  service never invokes TorchScript. The first listed fix is PyTorch 2.13.0,
-  whose CUDA 13 runtime requires an NVIDIA driver newer than the deployed 550
-  driver; silently changing the production runtime would break the A6000 gate.
+There is no working default credential. The server accepts either
+`FASTENHANCER_API_TOKEN` or `FASTENHANCER_API_TOKEN_FILE`, never both, and
+requires at least 16 characters. Bearer comparison is constant-time.
 
-These are not blanket CVE suppressions: any additional finding still fails CI.
-Re-review both exceptions and the pinned package version by 2026-08-21, and
-remove them as soon as a CUDA-12-compatible fixed PyTorch build is available.
+TLS is required by default in the server process. Plaintext must be explicitly
+enabled with `ALLOW_INSECURE_GRPC=true`. A configured `TLS_CLIENT_CA` changes
+the listener to mutual TLS while the bearer-token requirement remains active.
+
+## Data handling
+
+Audio exists in bounded in-memory buffers required for streaming and fallback.
+It is not written to disk, logged, traced, included in exceptions, or attached
+to metric labels. Tokens and private keys are excluded from configuration
+representations and logs.
+
+The LiveKit example sets `record=False`; users should separately review their
+LiveKit Cloud, agent observability, room recording, logging, and retention
+settings. VoxLattice cannot prevent another component in the audio path from
+recording the signal.
+
+Stream metadata can contain room and participant context. The server validates
+its size but does not use it for authorization or metric labels. Do not add
+secrets or unnecessary personal data to custom metadata.
+
+## Resource limits
+
+RPC message size, active stream count, metadata, per-stream input/output queues,
+plugin buffers, and idle time are bounded. Overload fails a stream with a gRPC
+resource status instead of growing memory without limit. Operators must choose
+limits appropriate for the GPU and enforce network-level connection and traffic
+controls where denial-of-service exposure exists.
+
+## Supply chain
+
+The model asset, checkpoint, model configuration, upstream source provenance,
+base image, Python dependencies, and GitHub Actions are pinned. Model hashes are
+checked during preparation and again during server startup. The runtime image
+uses a separate non-root stage and does not contain Git or the build toolchain.
+
+CI audits Python dependencies, scans the container, runs CodeQL and dependency
+review, and produces a CycloneDX SBOM with release candidates. These controls do
+not replace review of deployment-specific images and dependencies.
+
+## Reviewed dependency-audit exceptions
+
+`make audit` is fail-closed except for these PyTorch 2.10.0 advisories:
+
+- `PYSEC-2026-139` concerns local PT2 artifact loading. VoxLattice does not load
+  PT2 packages or invoke `torch.compile`; it loads a SHA-256-pinned state
+  dictionary with `weights_only=True`.
+- `PYSEC-2025-194` concerns local `torch.jit.script` memory corruption.
+  VoxLattice does not invoke TorchScript. The listed fixed line currently
+  requires a different CUDA runtime contract.
+
+These exceptions are limited to the named advisories; every additional finding
+still fails the audit. They must be removed when a compatible fixed PyTorch
+release is adopted.

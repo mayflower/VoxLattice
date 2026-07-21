@@ -8,9 +8,5 @@ dependencies = [
   "python-dotenv==1.2.2",
 ]
 
-[tool.uv.sources]
-livekit-plugins-fastenhancer = { path = "../../packages/livekit-plugins-fastenhancer", editable = true }
-
-[build-system]
-requires = ["hatchling==1.27.0"]
-build-backend = "hatchling.build"
+[tool.uv]
+package = false

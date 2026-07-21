@@ -11,14 +11,14 @@ from livekit import agents
 from livekit.agents import Agent, AgentServer, AgentSession, room_io
 from livekit.plugins import fastenhancer
 
-load_dotenv()
+load_dotenv(Path(__file__).with_name(".env"))
 
 
 def new_processor() -> fastenhancer.RemoteFastEnhancer:
     client_certificate = os.environ.get("FASTENHANCER_CLIENT_CERTIFICATE")
     client_private_key = os.environ.get("FASTENHANCER_CLIENT_PRIVATE_KEY")
     return fastenhancer.RemoteFastEnhancer(
-        endpoint=os.environ.get("FASTENHANCER_ENDPOINT", "dns:///fastenhancer:50051"),
+        endpoint=os.environ["FASTENHANCER_ENDPOINT"],
         api_key=os.environ["FASTENHANCER_API_TOKEN"],
         tls=os.environ.get("FASTENHANCER_TLS", "true").lower() == "true",
         root_certificates=(

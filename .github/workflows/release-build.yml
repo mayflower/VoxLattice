@@ -6,20 +6,25 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-only:
+    name: Build release candidates
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6
         with:
           version: "0.11.7"
           python-version: "3.12"
       - run: uv sync --all-packages --dev --frozen
-      - run: uv run python -m build generated
-      - run: uv run python -m build third_party/fastenhancer
-      - run: uv run python -m build packages/livekit-plugins-fastenhancer
-      - run: uv run python -m build services/fastenhancer-server
+      - run: make wheels
       - run: >-
           uv run pip-audit --format cyclonedx-json --output sbom-python.json
           --ignore-vuln PYSEC-2026-139 --ignore-vuln PYSEC-2025-194

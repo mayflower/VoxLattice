@@ -2,15 +2,21 @@
 name = "fastenhancer-upstream"
 version = "0.0.0+49ab55a"
 description = "Minimal pinned FastEnhancer inference code vendored for VoxLattice"
+readme = "UPSTREAM.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.12,<3.13"
 dependencies = ["torch==2.10.0"]
+
 classifiers = [
   "Development Status :: 3 - Alpha",
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3.12",
 ]
+
+[project.urls]
+Source = "https://github.com/mayflower/VoxLattice/tree/main/third_party/fastenhancer"
+Upstream = "https://github.com/aask1357/fastenhancer"
 
 [build-system]
 requires = ["hatchling==1.27.0"]

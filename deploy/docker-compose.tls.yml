@@ -1,0 +1,15 @@
+services:
+  fastenhancer:
+    environment:
+      ALLOW_INSECURE_GRPC: "false"
+      TLS_CERTIFICATE: /run/tls/server.crt
+      TLS_PRIVATE_KEY: /run/tls/server.key
+    volumes:
+      - type: bind
+        source: "${FASTENHANCER_TLS_CERTIFICATE:?set the host path to the server certificate}"
+        target: /run/tls/server.crt
+        read_only: true
+      - type: bind
+        source: "${FASTENHANCER_TLS_PRIVATE_KEY:?set the host path to the server private key}"
+        target: /run/tls/server.key
+        read_only: true

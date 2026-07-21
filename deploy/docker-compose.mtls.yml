@@ -1,0 +1,9 @@
+services:
+  fastenhancer:
+    environment:
+      TLS_CLIENT_CA: /run/tls/client-ca.crt
+    volumes:
+      - type: bind
+        source: "${FASTENHANCER_TLS_CLIENT_CA:?set the host path to the client CA certificate}"
+        target: /run/tls/client-ca.crt
+        read_only: true

@@ -18,7 +18,7 @@ processor.
 ## Development setup
 
 Python 3.12 and `uv` are required. GPU tests and the production server require
-an NVIDIA RTX A6000; production has no CPU fallback.
+an NVIDIA CUDA device; production has no CPU fallback.
 
 ```bash
 make bootstrap
@@ -27,12 +27,13 @@ make test
 make test-integration
 ```
 
-When the verified model and an A6000 are available:
+When the verified model and a CUDA device are available, set
+`FASTENHANCER_GPU_DEVICE_ID` to its UUID or index as shown by `nvidia-smi -L`:
 
 ```bash
-make model
+cp deploy/.env.example deploy/.env
+# Fill FASTENHANCER_API_TOKEN and FASTENHANCER_GPU_DEVICE_ID in deploy/.env.
 make test-gpu
-printf 'FASTENHANCER_API_TOKEN=%s\n' "$(openssl rand -hex 32)" > deploy/.env
 make compose-test
 ```
 

@@ -2,9 +2,11 @@
 name = "voxlattice-workspace"
 version = "0.1.0"
 description = "GPU voice-isolation service and LiveKit integration workspace"
+readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12,<3.13"
 dependencies = []
+keywords = ["audio", "cuda", "grpc", "livekit", "noise-suppression", "speech"]
 
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -14,12 +16,19 @@ classifiers = [
   "Topic :: Multimedia :: Sound/Audio :: Speech",
 ]
 
+[project.urls]
+Homepage = "https://github.com/mayflower/VoxLattice"
+Documentation = "https://github.com/mayflower/VoxLattice#readme"
+Issues = "https://github.com/mayflower/VoxLattice/issues"
+Source = "https://github.com/mayflower/VoxLattice"
+
 [tool.uv.workspace]
 members = [
   "generated",
   "third_party/fastenhancer",
   "services/fastenhancer-server",
   "packages/livekit-plugins-fastenhancer",
+  "examples/livekit-agent",
 ]
 
 [tool.uv.sources]
@@ -44,6 +53,7 @@ dev = [
   "types-protobuf==5.29.1.20250315",
   "types-pyyaml==6.0.12.20241230",
   "trustme==1.2.1",
+  "zizmor==1.27.0",
 ]
 
 [tool.ruff]
@@ -77,6 +87,6 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
-  "gpu: requires the configured NVIDIA RTX A6000 and real model",
+  "gpu: requires a configured NVIDIA CUDA device and real model",
   "integration: in-process network integration test",
 ]

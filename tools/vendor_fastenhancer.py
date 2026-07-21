@@ -47,6 +47,7 @@ def transform(path: str, value: bytes) -> bytes:
             "from functional import ONNXSTFT, CompressedSTFT",
             "from fastenhancer_upstream.functional import ONNXSTFT, CompressedSTFT",
         )
+    text = "\n".join(line.rstrip() for line in text.splitlines()).rstrip() + "\n"
     return text.encode()
 
 

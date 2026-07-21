@@ -10,6 +10,9 @@ All notable changes to VoxLattice will be documented here. The format follows
 
 - Open-source project identity, governance, contribution guidance, security
   policy, community standards, and GitHub collaboration templates.
+- User-focused installation, LiveKit integration, configuration, TLS,
+  operations, and benchmarking documentation.
+- Source-installable package metadata and TLS/mTLS Docker Compose overlays.
 
 ## [0.1.0] - 2026-07-21
 

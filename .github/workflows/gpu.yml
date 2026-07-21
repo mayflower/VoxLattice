@@ -1,4 +1,4 @@
-name: RTX A6000 validation
+name: GPU validation
 
 on:
   workflow_dispatch:
@@ -6,21 +6,31 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: gpu-validation-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   gpu:
+    name: Validate on configured GPU runner
     runs-on: [self-hosted, linux, x64, rtx-a6000]
     timeout-minutes: 90
+    env:
+      FASTENHANCER_GPU_DEVICE_ID: ${{ vars.FASTENHANCER_GPU_DEVICE_ID }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6
         with:
           version: "0.11.7"
           python-version: "3.12"
           enable-cache: true
-      - run: nvidia-smi --query-gpu=index,uuid,name,driver_version --format=csv
+      - run: nvidia-smi --query-gpu=index,name,driver_version --format=csv
       - run: uv sync --all-packages --dev --frozen
       - run: make model
-      - run: make test-gpu
+      - name: Run GPU tests
+        run: make test-gpu
       - run: make image
       - name: Start server
         env:
@@ -38,5 +48,5 @@ jobs:
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: a6000-validation
+          name: gpu-validation
           path: artifacts/validation/

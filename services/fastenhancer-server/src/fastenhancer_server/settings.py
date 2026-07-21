@@ -38,7 +38,6 @@ class ServerSettings:
     manifest_path: Path
     model_config_path: Path
     cuda_device: str
-    required_device_name: str
     api_token: str = field(repr=False)
     allow_insecure: bool
     tls_certificate: Path | None
@@ -80,7 +79,6 @@ class ServerSettings:
             manifest_path=Path(os.environ.get("MODEL_MANIFEST", "/opt/model/manifest.lock.json")),
             model_config_path=Path(os.environ.get("MODEL_CONFIG", "/opt/model/config.yaml")),
             cuda_device=os.environ.get("CUDA_DEVICE", "cuda:0"),
-            required_device_name=os.environ.get("REQUIRED_CUDA_DEVICE_NAME", "NVIDIA RTX A6000"),
             api_token=token,
             allow_insecure=allow_insecure,
             tls_certificate=Path(certificate) if certificate else None,

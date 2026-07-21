@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -8,18 +9,16 @@ from fastenhancer_server.model import FastEnhancerBStreamingModel
 from fastenhancer_upstream.models.model import ONNXModel as UpstreamStreamingModel
 
 ROOT = Path(__file__).resolve().parents[1]
-REQUIRED_GPU = "NVIDIA RTX A6000"
 
 
-def a6000_device() -> str:
-    matches = [
-        index
-        for index in range(torch.cuda.device_count())
-        if torch.cuda.get_device_name(index) == REQUIRED_GPU
-    ]
-    if len(matches) != 1:
-        pytest.fail(f"expected exactly one visible {REQUIRED_GPU}, found {matches}")
-    return f"cuda:{matches[0]}"
+def configured_device() -> str:
+    device = os.environ.get("CUDA_DEVICE", "cuda:0")
+    parsed = torch.device(device)
+    if parsed.type != "cuda" or parsed.index is None:
+        pytest.fail("CUDA_DEVICE must be an explicit cuda:N device")
+    if parsed.index >= torch.cuda.device_count():
+        pytest.fail(f"configured CUDA device does not exist: {device}")
+    return device
 
 
 def load_model() -> FastEnhancerBStreamingModel:
@@ -27,14 +26,13 @@ def load_model() -> FastEnhancerBStreamingModel:
         checkpoint_path=ROOT / "models/prepared/00500.pth",
         manifest_path=ROOT / "models/manifest.lock.json",
         config_path=ROOT / "models/prepared/config.yaml",
-        cuda_device=a6000_device(),
-        required_device_name=REQUIRED_GPU,
+        cuda_device=configured_device(),
     )
 
 
 @pytest.mark.gpu
 def test_real_model_batch_parity_and_device(monkeypatch: pytest.MonkeyPatch) -> None:
-    device = torch.device(a6000_device())
+    device = torch.device(configured_device())
     memory_before = torch.cuda.memory_allocated(device)
     model = load_model()
     assert torch.cuda.memory_allocated(device) > memory_before
@@ -66,7 +64,7 @@ def test_real_model_batch_parity_and_device(monkeypatch: pytest.MonkeyPatch) -> 
         _, cache_list = model.infer_batch(first[index : index + 1], [cache])
         output, _ = model.infer_batch(second[index : index + 1], cache_list)
         references.append(output[0])
-    torch.cuda.synchronize(torch.device(a6000_device()))
+    torch.cuda.synchronize(torch.device(configured_device()))
     reference = torch.stack(references)
     assert batched.device.type == "cuda"
     difference = batched.sub(reference)
@@ -119,17 +117,17 @@ def test_streaming_matches_official_export_wrapper_reference() -> None:
     )
     upstream.load_state_dict(checkpoint["model"], strict=True)
     upstream.remove_weight_reparameterizations()
-    upstream.eval().requires_grad_(False).to(a6000_device())
+    upstream.eval().requires_grad_(False).to(configured_device())
     generator = torch.Generator().manual_seed(91)
     source = torch.randn(1, 4096, generator=generator).mul_(0.03)
     padded = torch.nn.functional.pad(source, (0, 512))
-    seed = torch.zeros(1, device=a6000_device())
+    seed = torch.zeros(1, device=configured_device())
     stft_cache, istft_cache = upstream.stft.initialize_cache(seed)
     rnn_caches = upstream.initialize_cache(seed)
     upstream_streamed: list[torch.Tensor] = []
     with torch.inference_mode():
         for start in range(0, source.shape[1] + 256, 256):
-            hop = padded[:, start : start + 256].to(a6000_device())
+            hop = padded[:, start : start + 256].to(configured_device())
             spec, stft_cache = upstream.stft(hop, stft_cache)
             enhanced, *rnn_caches = upstream(spec, *rnn_caches)
             output, istft_cache = upstream.stft.inverse(enhanced, istft_cache)

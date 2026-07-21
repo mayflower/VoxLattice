@@ -68,7 +68,6 @@ async def run() -> None:
         manifest_path=settings.manifest_path,
         config_path=settings.model_config_path,
         cuda_device=settings.cuda_device,
-        required_device_name=settings.required_device_name,
     )
     model.warm_up((1, 2, min(8, settings.max_batch_size), settings.max_batch_size))
     validate_state_isolation(model)
