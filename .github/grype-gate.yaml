@@ -1,0 +1,8 @@
+check-for-app-update: false
+ignore:
+  - vulnerability: CVE-2026-15308
+    reason: >-
+      The only published fix is Python 3.15.0; VoxLattice does not import or
+      use the affected html.parser module. Keep reporting this finding in the
+      unfiltered SARIF scan and remove this gate exception when Python 3.13 has
+      a fixed release.

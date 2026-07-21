@@ -71,6 +71,11 @@ CI audits Python dependencies, scans the container, runs CodeQL and dependency
 review, and produces a CycloneDX SBOM with release candidates. These controls do
 not replace review of deployment-specific images and dependencies.
 
+The container workflow uploads every Grype finding to GitHub code scanning. Its
+build gate rejects high and critical findings when a fix is available. Findings
+without an available fix remain visible but do not make every scheduled run
+unactionably red.
+
 ## Reviewed dependency-audit exceptions
 
 `make audit` is fail-closed except for these PyTorch 2.10.0 advisories:
@@ -85,3 +90,10 @@ not replace review of deployment-specific images and dependencies.
 These exceptions are limited to the named advisories; every additional finding
 still fails the audit. They must be removed when a compatible fixed PyTorch
 release is adopted.
+
+## Reviewed container-gate exception
+
+`CVE-2026-15308` affects CPython's incremental `html.parser` and currently lists
+Python 3.15.0 as its only fixed version. VoxLattice neither imports nor uses that
+module. The finding remains in the unfiltered SARIF report, but the actionable
+container gate ignores it until a fixed Python 3.13 release is available.

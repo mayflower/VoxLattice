@@ -34,15 +34,25 @@ jobs:
       - run: make audit
       - name: Build image when model cache is available
         run: make model image
-      - id: container-scan
+      - id: container-report
+        name: Report all container findings
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
+        with:
+          image: voxlattice:0.1.0
+          fail-build: false
+          severity-cutoff: high
+          output-format: sarif
+      - name: Upload container findings to code scanning
+        if: always() && steps.container-report.outputs.sarif != ''
+        uses: github/codeql-action/upload-sarif@e0647621c2984b5ed2f768cb892365bf2a616ad1 # v4.37.2
+        with:
+          sarif_file: ${{ steps.container-report.outputs.sarif }}
+      - name: Reject actionable high and critical findings
         uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
         with:
           image: voxlattice:0.1.0
           fail-build: true
           severity-cutoff: high
-          output-format: sarif
-      - name: Upload container findings to code scanning
-        if: always() && steps.container-scan.outputs.sarif != ''
-        uses: github/codeql-action/upload-sarif@e0647621c2984b5ed2f768cb892365bf2a616ad1 # v4.37.2
-        with:
-          sarif_file: ${{ steps.container-scan.outputs.sarif }}
+          only-fixed: true
+          output-format: table
+          config: .github/grype-gate.yaml
