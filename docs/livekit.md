@@ -7,7 +7,7 @@ tracks.
 
 ## Compatibility
 
-- Python 3.12
+- Python 3.12 or 3.13
 - `livekit>=1.1.13,<1.2`
 - 16 kHz mono `AudioFrame` input
 - VoxLattice server and plugin from the same release

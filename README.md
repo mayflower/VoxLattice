@@ -5,7 +5,7 @@
 [![Security](https://github.com/mayflower/VoxLattice/actions/workflows/security.yml/badge.svg)](https://github.com/mayflower/VoxLattice/actions/workflows/security.yml)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/mayflower/VoxLattice/badge)](https://securityscorecards.dev/viewer/?uri=github.com/mayflower/VoxLattice)
 [![License: MIT](https://img.shields.io/github/license/mayflower/VoxLattice)](LICENSE)
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Python 3.12–3.13](https://img.shields.io/badge/Python-3.12%E2%80%933.13-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 
 VoxLattice is a self-hosted, CUDA-accelerated voice-isolation service for live
 audio. It combines a streaming FastEnhancer-B inference server with a LiveKit
@@ -41,7 +41,7 @@ GPU and workload, so benchmark the target system before production use.
 
 Prerequisites:
 
-- Git, Python 3.12, Docker, and Docker Compose
+- Git, Python 3.12 or 3.13, Docker, and Docker Compose
 - NVIDIA driver and [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
 - An NVIDIA GPU visible in `nvidia-smi`
 

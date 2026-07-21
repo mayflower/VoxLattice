@@ -6,7 +6,7 @@ the image is built and copied into the image.
 
 ## Prerequisites
 
-Install Git, Python 3.12, Docker, Docker Compose, an NVIDIA driver, and NVIDIA
+Install Git, Python 3.12 or 3.13, Docker, Docker Compose, an NVIDIA driver, and NVIDIA
 Container Toolkit. The host Python installation is used only by the
 standard-library model verification tools; application dependencies are built
 inside the image. Confirm that Docker can access the intended device:
