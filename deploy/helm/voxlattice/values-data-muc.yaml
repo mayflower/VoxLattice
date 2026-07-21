@@ -4,6 +4,12 @@
 # The bearer token is not part of this file. Create the Secret it references
 # out of band before the first sync; see docs/kubernetes.md.
 
+# Parked at zero: the pinned image below predates the interpreter and model
+# permission fixes in the Dockerfile and cannot start. Raise to 1 together with
+# the tag of a rebuilt image, so the shared GPU unit is not held by a pod that
+# only crash loops.
+replicaCount: 0
+
 image:
   # Immutable tag; bump together with a tested release.
   tag: sha-0ae131a74803945d92f59b897cf88d67e5232022

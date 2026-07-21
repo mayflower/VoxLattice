@@ -5,6 +5,12 @@ ARG PYTHON_IMAGE=python:3.13.14-slim-trixie@sha256:6771159cd4fa5d9bba1258caf0b82
 # hadolint ignore=DL3006
 FROM ${PYTHON_IMAGE} AS builder
 ARG UV_VERSION=0.11.7
+# Build against the interpreter in PYTHON_IMAGE. Without this uv honours
+# .python-version, finds no matching interpreter, and downloads a managed one
+# under /root; the venv would then symlink to a path the runtime stage does
+# not copy, leaving /opt/venv/bin/python dangling.
+ENV UV_PYTHON=/usr/local/bin/python \
+    UV_PYTHON_DOWNLOADS=never
 WORKDIR /src
 RUN python -m pip install --no-cache-dir "uv==${UV_VERSION}"
 COPY pyproject.toml uv.lock .python-version README.md ./
@@ -23,8 +29,13 @@ ENV PATH=/opt/venv/bin:$PATH \
     MODEL_CONFIG=/opt/model/config.yaml \
     MODEL_MANIFEST=/opt/model/manifest.lock.json \
     CUDA_DEVICE=cuda:0
+# /opt/model is created explicitly so that it keeps its execute bit. A COPY
+# --chmod=0444 that creates the directory implicitly applies 0444 to the
+# directory as well, and without +x its files cannot be opened even by their
+# owner.
 RUN groupadd --system --gid 65532 fastenhancer \
-    && useradd --system --uid 65532 --gid 65532 --home-dir /nonexistent --shell /usr/sbin/nologin fastenhancer
+    && useradd --system --uid 65532 --gid 65532 --home-dir /nonexistent --shell /usr/sbin/nologin fastenhancer \
+    && install -d -o 65532 -g 65532 -m 0555 /opt/model
 COPY --from=builder /src/.venv /opt/venv
 COPY --chown=65532:65532 --chmod=0444 models/prepared/00500.pth models/prepared/config.yaml /opt/model/
 COPY --chown=65532:65532 --chmod=0444 models/manifest.lock.json /opt/model/manifest.lock.json
