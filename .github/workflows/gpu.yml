@@ -12,11 +12,14 @@ concurrency:
 
 jobs:
   gpu:
-    name: Validate on configured GPU runner
-    runs-on: [self-hosted, linux, x64, rtx-a6000]
+    name: Validate on a GPU runner
+    runs-on: [self-hosted, linux, x64, gpu]
     timeout-minutes: 90
     env:
-      FASTENHANCER_GPU_DEVICE_ID: ${{ vars.FASTENHANCER_GPU_DEVICE_ID }}
+      # The server drives a single device, so the first GPU on the runner is
+      # the right default whatever it happens to be. Set the repository
+      # variable only to pin a specific device on a multi-GPU host.
+      FASTENHANCER_GPU_DEVICE_ID: ${{ vars.FASTENHANCER_GPU_DEVICE_ID || '0' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -26,19 +29,21 @@ jobs:
           version: "0.11.7"
           python-version: "3.12"
           enable-cache: true
-      - run: nvidia-smi --query-gpu=index,name,driver_version --format=csv
+      - name: Show the GPUs visible to the runner
+        run: nvidia-smi --query-gpu=index,name,driver_version --format=csv
+      - name: Generate an ephemeral API token
+        # The token only authenticates the smoke client against the server
+        # started in this job, so it does not need to outlive the run.
+        run: echo "FASTENHANCER_API_TOKEN=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
       - run: uv sync --all-packages --dev --frozen
       - run: make model
       - name: Run GPU tests
         run: make test-gpu
       - run: make image
       - name: Start server
-        env:
-          FASTENHANCER_API_TOKEN: ${{ secrets.FASTENHANCER_API_TOKEN }}
         run: make up
       - name: Smoke and benchmark
         env:
-          FASTENHANCER_API_TOKEN: ${{ secrets.FASTENHANCER_API_TOKEN }}
           BENCH_TARGET_STREAMS: "16"
         run: |
           make smoke
