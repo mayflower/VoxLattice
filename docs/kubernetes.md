@@ -135,12 +135,29 @@ directory and points `CUDA_MPS_PIPE_DIRECTORY` at it. Also set
 `gpu.mps.pinnedDeviceMemoryLimit` (for example `0=8G`) so that this workload
 cannot exhaust the VRAM of everything else sharing the device.
 
-The image runs as UID 65532 and the chart does not override that. An MPS client
-needs to traverse the pipe directory and use its `control` socket; the NVIDIA
-control daemon creates both world-accessible by default, so an unprivileged
-client works. Where a cluster hardens those permissions, CUDA initialisation
-fails during warm-up — check the mode of the pipe directory before treating
-that as a GPU fault.
+MPS serves **one UID at a time**. The control daemon runs a single MPS server
+owned by whichever user connected first, and a client running under a different
+UID is queued until that server can be torn down — which never happens while
+other workloads are using it. CUDA initialisation then blocks indefinitely: the
+process does not fail, it hangs, and the startup probe eventually restarts it.
+
+The image runs as UID 65532. Where the node's MPS server is owned by another
+user, set `podSecurityContext.runAsUser` to match it. Confirm the owner from
+the daemon before assuming:
+
+```bash
+kubectl -n <plugin-namespace> logs <mps-control-daemon-pod> --all-containers \
+  | grep -E 'NEW CLIENT|Server .* has .* active'
+```
+
+`NEW CLIENT … from user <uid>: Server is not ready, push client to pending
+list` is the signature of this mismatch. Leaving such a pod running is not
+harmless: while it waits, the daemon repeatedly tries to shut down the server
+the other GPU workloads depend on.
+
+File permissions on the pipe directory are a separate and lesser concern; the
+daemon creates the `control` socket world-accessible by default, so they are
+rarely the cause.
 
 MPS units are a finite, cluster-wide pool. Confirm a free unit exists before
 raising `replicaCount` or switching to `RollingUpdate`, which needs one spare

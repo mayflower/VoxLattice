@@ -103,6 +103,27 @@ gpu:
     # when several workloads share one GPU through MPS.
     pinnedDeviceMemoryLimit: ""
 
+# The image builds and runs as UID 65532. Override only where the platform
+# forces it — notably NVIDIA MPS, whose control daemon serves one UID at a
+# time: a client whose UID differs from the running MPS server's owner is
+# queued until that server can be torn down, which never happens while other
+# workloads are using it. CUDA initialisation then blocks indefinitely.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  # Grants the unprivileged user read access to the mounted Secret files.
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
 resources:
   requests:
     cpu: 500m

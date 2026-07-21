@@ -41,23 +41,13 @@ spec:
       {{- end }}
       terminationGracePeriodSeconds: {{ include "voxlattice.terminationGracePeriodSeconds" . }}
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 65532
-        runAsGroup: 65532
-        # Grants the unprivileged user read access to the mounted Secret files.
-        fsGroup: 65532
-        seccompProfile:
-          type: RuntimeDefault
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: {{ .Chart.Name }}
           image: {{ include "voxlattice.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop:
-                - ALL
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           ports:
             - name: grpc
               containerPort: {{ .Values.server.grpcPort }}
