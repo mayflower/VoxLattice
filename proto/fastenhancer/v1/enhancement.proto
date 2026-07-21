@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+package fastenhancer.v1;
+
+service EnhancementService {
+  rpc Enhance(stream ClientMessage) returns (stream ServerMessage);
+  rpc GetCapabilities(GetCapabilitiesRequest) returns (GetCapabilitiesResponse);
+}
+
+enum SampleFormat {
+  SAMPLE_FORMAT_UNSPECIFIED = 0;
+  SAMPLE_FORMAT_PCM_S16LE = 1;
+}
+
+message ClientMessage {
+  oneof body {
+    StartStream start = 1;
+    AudioChunk audio = 2;
+    EndStream end = 3;
+  }
+}
+
+message StartStream {
+  string protocol_version = 1;
+  string stream_id = 2;
+  uint64 input_start_sample = 3;
+  uint32 sample_rate_hz = 4;
+  uint32 channels = 5;
+  SampleFormat sample_format = 6;
+  map<string, string> metadata = 7;
+}
+
+message AudioChunk {
+  uint64 sequence = 1;
+  uint64 input_start_sample = 2;
+  bytes pcm_s16le = 3;
+}
+
+message EndStream { bool flush = 1; }
+
+message ServerMessage {
+  oneof body {
+    StreamAccepted accepted = 1;
+    EnhancedAudio audio = 2;
+    StreamEnded ended = 3;
+    StreamError error = 4;
+  }
+}
+
+message StreamAccepted {
+  string protocol_version = 1;
+  string model_name = 2;
+  string model_revision = 3;
+  string model_sha256 = 4;
+  uint32 sample_rate_hz = 5;
+  uint32 channels = 6;
+  SampleFormat sample_format = 7;
+  uint32 hop_samples = 8;
+  uint32 algorithmic_delay_samples = 9;
+  string cuda_device = 10;
+  uint32 max_audio_chunk_samples = 11;
+}
+
+message EnhancedAudio {
+  uint64 output_sequence = 1;
+  uint64 output_start_sample = 2;
+  bytes pcm_s16le = 3;
+  uint32 valid_samples = 4;
+}
+
+message StreamEnded {
+  uint64 input_samples = 1;
+  uint64 output_samples = 2;
+  bool flushed = 3;
+}
+
+message StreamError {
+  string code = 1;
+  string message = 2;
+  bool retryable = 3;
+  uint64 expected_input_start_sample = 4;
+}
+
+message GetCapabilitiesRequest {}
+
+message GetCapabilitiesResponse {
+  StreamAccepted capabilities = 1;
+  uint32 max_active_streams = 2;
+}

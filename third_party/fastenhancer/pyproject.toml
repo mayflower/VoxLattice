@@ -1,0 +1,20 @@
+[project]
+name = "fastenhancer-upstream"
+version = "0.0.0+49ab55a"
+description = "Minimal pinned FastEnhancer inference code vendored for VoxLattice"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12,<3.13"
+dependencies = ["torch==2.10.0"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.12",
+]
+
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fastenhancer_upstream"]

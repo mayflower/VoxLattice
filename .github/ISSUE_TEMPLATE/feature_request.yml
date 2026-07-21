@@ -1,0 +1,40 @@
+name: Feature request
+description: Propose a focused improvement within the VoxLattice scope
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the user problem without prescribing a solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Explain the smallest change that solves the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: true
+  - type: textarea
+    id: contract
+    attributes:
+      label: Audio, compatibility, and security impact
+      description: Address timeline, API, protocol, GPU, privacy, and deployment effects where relevant.
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope checks
+      options:
+        - label: This preserves a CUDA-only production path and bounded queues.
+          required: true
+        - label: This does not add an unrelated backend, UI, database, or audio persistence layer.
+          required: true

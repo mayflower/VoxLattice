@@ -1,0 +1,44 @@
+name: CPU CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python: ["3.12"]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6
+        with:
+          version: "0.11.7"
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+      - run: uv sync --all-packages --dev --frozen
+      - run: make check
+      - run: make test
+      - run: make test-integration
+      - run: uv run python -m build generated
+      - run: uv run python -m build third_party/fastenhancer
+      - run: uv run python -m build packages/livekit-plugins-fastenhancer
+      - run: uv run python -m build services/fastenhancer-server
+      - name: Wheel import in clean environment
+        run: |
+          uv venv --clear /tmp/wheel-test
+          uv pip install --python /tmp/wheel-test/bin/python \
+            generated/dist/*.whl third_party/fastenhancer/dist/*.whl \
+            packages/livekit-plugins-fastenhancer/dist/*.whl \
+            services/fastenhancer-server/dist/*.whl
+          /tmp/wheel-test/bin/python -c "from fastenhancer.v1 import enhancement_pb2; from fastenhancer_server.main import main; from livekit.plugins import fastenhancer; assert callable(main); print(fastenhancer.__version__, enhancement_pb2.DESCRIPTOR.package)"
+      - run: make audit
+      - name: Dockerfile lint
+        uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf
+        with:
+          dockerfile: services/fastenhancer-server/Dockerfile

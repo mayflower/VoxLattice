@@ -1,0 +1,29 @@
+model: "fastenhancer.default"
+model_kwargs:
+  channels: 48
+  kernel_size: [8, 3, 3]
+  stride: 4
+  rnnformer_kwargs:
+    num_blocks: 3
+    channels: 36
+    freq: 24
+    num_heads: 4
+    eps: 1.0e-5
+    positional_embedding: train
+    attn_bias: false
+    post_act: false
+    pre_norm: false
+  pre_post_init: "linear_fixed"
+  n_fft: 512
+  hop_size: 256
+  win_size: 512
+  window: hann
+  stft_normalized: false
+  mask: null
+  activation: SiLU
+  activation_kwargs: {inplace: true}
+  input_compression: 0.3
+  normalize_final_conv: true
+  weight_norm: true
+  resnet: false
+sampling_rate: 16000

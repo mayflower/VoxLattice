@@ -1,0 +1,82 @@
+[project]
+name = "voxlattice-workspace"
+version = "0.1.0"
+description = "GPU voice-isolation service and LiveKit integration workspace"
+license = "MIT"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
+
+[tool.uv.workspace]
+members = [
+  "generated",
+  "third_party/fastenhancer",
+  "services/fastenhancer-server",
+  "packages/livekit-plugins-fastenhancer",
+]
+
+[tool.uv.sources]
+fastenhancer-protocol = { workspace = true }
+fastenhancer-upstream = { workspace = true }
+fastenhancer-server = { workspace = true }
+livekit-plugins-fastenhancer = { workspace = true }
+
+[dependency-groups]
+dev = [
+  "build==1.2.2.post1",
+  "grpcio-tools==1.70.0",
+  "livekit-agents==1.6.6",
+  "mypy==1.15.0",
+  "pip-audit==2.10.1",
+  "psutil==7.2.2",
+  "pytest==9.0.3",
+  "pytest-asyncio==1.4.0",
+  "pytest-timeout==2.3.1",
+  "python-dotenv==1.2.2",
+  "ruff==0.9.10",
+  "types-protobuf==5.29.1.20250315",
+  "types-pyyaml==6.0.12.20241230",
+  "trustme==1.2.1",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["generated/fastenhancer/v1", "third_party/fastenhancer/src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC", "S", "RUF"]
+ignore = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["fastenhancer_server", "livekit.plugins.fastenhancer"]
+mypy_path = [
+  "services/fastenhancer-server/src",
+  "packages/livekit-plugins-fastenhancer",
+  "generated",
+  "third_party/fastenhancer/src",
+]
+exclude = ["generated/fastenhancer/v1"]
+
+[[tool.mypy.overrides]]
+module = ["grpc", "grpc.*", "grpc_health", "grpc_health.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+  "gpu: requires the configured NVIDIA RTX A6000 and real model",
+  "integration: in-process network integration test",
+]

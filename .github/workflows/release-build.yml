@@ -1,0 +1,36 @@
+name: Reproducible release build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-only:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6
+        with:
+          version: "0.11.7"
+          python-version: "3.12"
+      - run: uv sync --all-packages --dev --frozen
+      - run: uv run python -m build generated
+      - run: uv run python -m build third_party/fastenhancer
+      - run: uv run python -m build packages/livekit-plugins-fastenhancer
+      - run: uv run python -m build services/fastenhancer-server
+      - run: >-
+          uv run pip-audit --format cyclonedx-json --output sbom-python.json
+          --ignore-vuln PYSEC-2026-139 --ignore-vuln PYSEC-2025-194
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: unsigned-release-candidates
+          path: |
+            generated/dist/
+            third_party/fastenhancer/dist/
+            packages/livekit-plugins-fastenhancer/dist/
+            services/fastenhancer-server/dist/
+            sbom-python.json
+            LICENSE
+            THIRD_PARTY_NOTICES.md

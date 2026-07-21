@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.pth binary
+*.zip binary
+*.wav binary
+*.pem text eol=lf
+*.key text eol=lf

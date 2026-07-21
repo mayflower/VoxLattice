@@ -1,0 +1,29 @@
+name: Dependency and container security
+
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6
+        with:
+          version: "0.11.7"
+          python-version: "3.12"
+      - run: uv sync --all-packages --dev --frozen
+      - run: make audit
+      - name: Build image when model cache is available
+        run: make model image
+      - uses: anchore/scan-action@df395807f4554463d4455b8047cf58e37b6acaae
+        with:
+          image: voxlattice:0.1.0
+          fail-build: true
+          severity-cutoff: high

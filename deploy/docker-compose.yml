@@ -1,0 +1,80 @@
+name: voxlattice
+
+services:
+  fastenhancer:
+    build:
+      context: ..
+      dockerfile: services/fastenhancer-server/Dockerfile
+    image: voxlattice:0.1.0
+    restart: unless-stopped
+    environment:
+      ALLOW_INSECURE_GRPC: "true"
+      FASTENHANCER_API_TOKEN_FILE: /run/secrets/fastenhancer_api_token
+      CUDA_DEVICE: cuda:0
+      REQUIRED_CUDA_DEVICE_NAME: NVIDIA RTX A6000
+      MAX_ACTIVE_STREAMS: "128"
+      MAX_BATCH_SIZE: "32"
+      MAX_BATCH_WAIT_MS: "1"
+    secrets:
+      - fastenhancer_api_token
+    ports:
+      - "127.0.0.1:${FASTENHANCER_GRPC_PORT:-50051}:50051"
+      - "127.0.0.1:${FASTENHANCER_HTTP_PORT:-8080}:8080"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["GPU-bac67bca-195d-3490-88f0-b8a3453c5929"]
+              capabilities: [gpu]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/readyz', timeout=2).read()",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 60s
+
+  smoke:
+    profiles: [test]
+    image: voxlattice:0.1.0
+    depends_on:
+      fastenhancer:
+        condition: service_healthy
+    entrypoint: ["python", "/opt/fastenhancer-client.py"]
+    command:
+      [
+        "--endpoint",
+        "fastenhancer:50051",
+        "--duration-s",
+        "1",
+        "--no-realtime",
+      ]
+    environment:
+      FASTENHANCER_API_TOKEN_FILE: /run/secrets/fastenhancer_api_token
+    secrets:
+      - fastenhancer_api_token
+    volumes:
+      - ../examples/grpc-client/client.py:/opt/fastenhancer-client.py:ro
+    restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
+secrets:
+  fastenhancer_api_token:
+    environment: FASTENHANCER_API_TOKEN
