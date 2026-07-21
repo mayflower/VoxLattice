@@ -4,6 +4,13 @@
 # The bearer token is not part of this file. Create the Secret it references
 # out of band before the first sync; see docs/kubernetes.md.
 
+# Parked at zero. The image itself is sound, but the cluster's MPS control
+# daemon runs one server for a single UID at a time, and the four existing GPU
+# workloads hold a server owned by root. A client running as 65532 is queued
+# indefinitely, and leaving it running makes the daemon keep trying to tear
+# down the root server other workloads depend on. See docs/kubernetes.md.
+replicaCount: 0
+
 image:
   # Immutable tag; bump together with a tested release.
   tag: sha-aaf87d01940e2f18ac92e9dc9b40a10f038c95e6
