@@ -27,12 +27,37 @@ def test_locked_manifest_and_prepared_model() -> None:
         assert stat.S_IMODE(checkpoint.stat().st_mode) == 0o644
 
 
+def _dockerfile_instructions() -> list[str]:
+    """Dockerfile lines with comments removed, so prose cannot satisfy an assertion."""
+    text = (ROOT / "services/fastenhancer-server/Dockerfile").read_text()
+    return [line for line in text.splitlines() if not line.lstrip().startswith("#")]
+
+
 def test_container_runs_module_and_models_are_world_readable() -> None:
-    dockerfile = (ROOT / "services/fastenhancer-server/Dockerfile").read_text()
-    assert 'ENTRYPOINT ["python", "-m", "fastenhancer_server.main"]' in dockerfile
-    assert dockerfile.count("--chmod=0444") == 2
-    assert "models/prepared/00500.pth models/prepared/config.yaml" in dockerfile
-    assert "models/manifest.lock.json /opt/model/manifest.lock.json" in dockerfile
+    instructions = _dockerfile_instructions()
+    joined = "\n".join(instructions)
+    copies = [line for line in instructions if line.startswith("COPY")]
+    assert 'ENTRYPOINT ["python", "-m", "fastenhancer_server.main"]' in joined
+    assert sum(line.count("--chmod=0444") for line in copies) == 2
+    assert "models/prepared/00500.pth models/prepared/config.yaml" in joined
+    assert "models/manifest.lock.json /opt/model/manifest.lock.json" in joined
+
+
+def test_container_model_directory_keeps_its_execute_bit() -> None:
+    """A COPY --chmod that creates /opt/model implicitly applies the file mode to
+    the directory as well. Without the execute bit the checkpoint cannot be opened,
+    even by its owner, so the directory is created ahead of the COPY."""
+    joined = "\n".join(_dockerfile_instructions())
+    assert "install -d -o 65532 -g 65532 -m 0555 /opt/model" in joined
+
+
+def test_container_builds_against_the_base_image_interpreter() -> None:
+    """uv otherwise honours .python-version, downloads a managed interpreter under
+    /root, and leaves /opt/venv/bin/python pointing at a path the runtime stage
+    never copies."""
+    joined = "\n".join(_dockerfile_instructions())
+    assert "UV_PYTHON=/usr/local/bin/python" in joined
+    assert "UV_PYTHON_DOWNLOADS=never" in joined
 
 
 def test_local_compose_smoke_profile_selects_an_explicit_gpu() -> None:
