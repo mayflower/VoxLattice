@@ -1,0 +1,22 @@
+apiVersion: v2
+name: voxlattice
+description: CUDA-accelerated voice-isolation gRPC service for live audio
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.25.0-0"
+home: https://github.com/mayflower/VoxLattice
+sources:
+  - https://github.com/mayflower/VoxLattice
+keywords:
+  - audio
+  - cuda
+  - grpc
+  - livekit
+  - noise-suppression
+  - speech
+maintainers:
+  - name: VoxLattice authors
+    url: https://github.com/mayflower/VoxLattice
+annotations:
+  artifacthub.io/license: MIT

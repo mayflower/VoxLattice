@@ -179,6 +179,7 @@ and lifecycle behavior are documented in [LiveKit integration](docs/livekit.md).
 
 - [Configuration reference](docs/configuration.md)
 - [Operations and TLS deployment](docs/operations.md)
+- [Kubernetes deployment](docs/kubernetes.md)
 - [LiveKit integration](docs/livekit.md)
 - [Architecture](docs/architecture.md)
 - [gRPC protocol and audio timeline](docs/protocol.md)

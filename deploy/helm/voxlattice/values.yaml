@@ -1,0 +1,199 @@
+# Default values for VoxLattice.
+#
+# The server requires an NVIDIA CUDA GPU; there is no production CPU fallback.
+# The verified model checkpoint is baked into the image, so no persistent
+# volume or download step is needed at runtime.
+
+image:
+  repository: ghcr.io/mayflower/voxlattice
+  # "edge" is the rolling build of the main branch. Pin a release version or an
+  # immutable sha-<40-character commit> tag for anything but evaluation.
+  tag: edge
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Each replica loads its own model instance and serves it from one GPU unit.
+replicaCount: 1
+
+deploymentStrategy:
+  # Recreate is the safe default: with one GPU unit per pod, a rolling update
+  # deadlocks waiting for a device the old pod still holds. Switch to
+  # RollingUpdate only when spare GPU capacity exists (for example under MPS).
+  type: Recreate
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# Bearer token used by clients. The server rejects tokens shorter than
+# 16 characters and refuses to start without one.
+auth:
+  # Preferred: reference a Secret managed outside this chart (SOPS, External
+  # Secrets, sealed-secrets). Leave `token` empty when this is set.
+  existingSecret: ""
+  secretKey: api-token
+  # Development convenience only. A token set here is rendered into a Secret
+  # and therefore stored in plain text wherever these values live.
+  token: ""
+
+tls:
+  # certManager     - issue a server certificate with cert-manager
+  # existingSecret  - mount a kubernetes.io/tls Secret you manage yourself
+  # insecure        - plaintext gRPC (ALLOW_INSECURE_GRPC=true)
+  #
+  # "insecure" sends audio and bearer tokens unencrypted. Use it only on an
+  # isolated network, and never together with ingressRoute.
+  mode: certManager
+  mountPath: /run/tls
+  # Used when mode is "existingSecret". Must contain tls.crt and tls.key.
+  existingSecret: ""
+  certManager:
+    # Reference an existing issuer, for example:
+    #   issuerRef: {name: my-ca, kind: ClusterIssuer}
+    # Leave empty to let the chart create a self-signed CA and an issuer that
+    # derives from it. Public ACME issuers cannot sign cluster-internal names,
+    # so a CA-type issuer is required here.
+    issuerRef: {}
+    duration: 2160h
+    renewBefore: 360h
+    # Extra SANs beyond the generated in-cluster service names.
+    extraDnsNames: []
+  # Mutual TLS. When enabled the server requires and verifies client
+  # certificates against the referenced CA.
+  clientCA:
+    enabled: false
+    existingSecret: ""
+    secretKey: ca.crt
+
+# Server tuning. Names and defaults match docs/configuration.md. Benchmark the
+# target GPU before raising concurrency or queue bounds; larger queues add
+# latency and memory use without adding GPU capacity.
+server:
+  grpcPort: 50051
+  httpPort: 8080
+  cudaDevice: "cuda:0"
+  maxActiveStreams: 128
+  maxBatchSize: 32
+  maxBatchWaitMs: 1
+  maxPendingAudioMsPerStream: 500
+  maxOutputAudioMsPerStream: 500
+  streamIdleTimeoutS: 30
+  maxAudioChunkSamples: 16000
+  gracefulShutdownS: 10
+
+gpu:
+  enabled: true
+  resourceName: nvidia.com/gpu
+  resourceCount: 1
+  # Set to "nvidia" on clusters where the NVIDIA container runtime is exposed
+  # through a RuntimeClass rather than being the node default.
+  runtimeClassName: ""
+  # NVIDIA Multi-Process Service. Required when the device plugin advertises
+  # more than one replica per physical GPU.
+  mps:
+    enabled: false
+    hostPath: /run/nvidia/mps
+    mountPath: /mps
+    # Caps VRAM for this workload, for example "0=8G". Strongly recommended
+    # when several workloads share one GPU through MPS.
+    pinnedDeviceMemoryLimit: ""
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 2Gi
+  limits:
+    cpu: "4"
+    memory: 8Gi
+
+service:
+  type: ClusterIP
+  annotations: {}
+  # Optional Service resolving to individual pod addresses, for clients that
+  # do their own load balancing (a round_robin service config, or a proxy).
+  #
+  # The bundled LiveKit plugin does not need it: it opens one channel per
+  # track, and the default pick_first policy would pin every channel to the
+  # first resolved pod. Separate connections through the ClusterIP are spread
+  # across ready pods by kube-proxy instead.
+  headless:
+    enabled: false
+
+# External gRPC exposure through a Traefik IngressRoute. Requires
+# tls.mode other than "insecure": Traefik re-encrypts to the backend.
+ingressRoute:
+  enabled: false
+  host: ""
+  entryPoints:
+    - websecure
+  annotations: {}
+  # IngressRoute does not honour cert-manager ingress annotations, so the
+  # edge certificate is requested explicitly.
+  certificate:
+    enabled: true
+    issuerRef:
+      name: letsencrypt
+      kind: ClusterIssuer
+    secretName: ""
+  serversTransport:
+    # The backend certificate is validated against the in-cluster service name
+    # it was issued for. Only enable this when using an unrelated certificate.
+    insecureSkipVerify: false
+
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  additionalLabels: {}
+
+# Restricts who may reach the gRPC and metrics ports. Requires a CNI that
+# enforces NetworkPolicy.
+networkPolicy:
+  enabled: false
+  # Selectors allowed to reach the gRPC port. Each entry accepts the keys
+  # `namespaceSelector` and `podSelector`, matching NetworkPolicyPeer.
+  grpcFrom: []
+  # Selectors allowed to reach the health and metrics port, for example the
+  # Prometheus namespace.
+  httpFrom: []
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# Model verification and CUDA warm-up run before the HTTP listener binds, so
+# the startup probe must tolerate a long initial silence. The defaults allow
+# six minutes before the container is restarted.
+startupProbe:
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 72
+
+livenessProbe:
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+readinessProbe:
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Defaults to server.gracefulShutdownS plus headroom for scheduler teardown.
+terminationGracePeriodSeconds: ""
+
+podAnnotations: {}
+podLabels: {}
+extraEnv: []
+extraVolumes: []
+extraVolumeMounts: []
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+priorityClassName: ""

@@ -5,8 +5,13 @@ UV := uv
 PYTHON := python3
 COMPOSE := docker compose -f deploy/docker-compose.yml
 PIP_AUDIT_IGNORES := --ignore-vuln PYSEC-2026-139 --ignore-vuln PYSEC-2025-194
+HELM := helm
+KUBECONFORM := kubeconform
+CHART := deploy/helm/voxlattice
+CHART_KUBERNETES_VERSION := 1.32.0
+CHART_TEST_TOKEN := helm-render-validation-token
 
-.PHONY: help bootstrap check workflow-check vendor-check format proto proto-check test test-integration audit model wheels image up smoke enhance compose-test test-gpu benchmark down clean
+.PHONY: help bootstrap check workflow-check vendor-check format proto proto-check test test-integration audit model wheels image up smoke enhance compose-test test-gpu benchmark helm-check down clean
 
 help:
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "%-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -107,6 +112,25 @@ benchmark: ## Run the real-time load generator and write JSON/Markdown artifacts
 		test -n "$${FASTENHANCER_API_TOKEN:-}" || (echo "FASTENHANCER_API_TOKEN or deploy/.env is required" >&2; exit 2); \
 		test -n "$${FASTENHANCER_GPU_DEVICE_ID:-}" || (echo "FASTENHANCER_GPU_DEVICE_ID or deploy/.env is required" >&2; exit 2); \
 		$(UV) run python benchmarks/load.py
+
+helm-check: ## Lint the Kubernetes chart and validate every manifest it renders
+	$(HELM) lint $(CHART) --set auth.token=$(CHART_TEST_TOKEN)
+	@set -eu; \
+		for options in \
+			"--set auth.token=$(CHART_TEST_TOKEN)" \
+			"--set auth.token=$(CHART_TEST_TOKEN) --set tls.mode=insecure --set networkPolicy.enabled=true" \
+			"--set auth.token=$(CHART_TEST_TOKEN) --set serviceMonitor.enabled=true --set podDisruptionBudget.enabled=true" \
+			"--values $(CHART)/values-data-muc.yaml"; \
+		do \
+			echo "rendering chart with: $${options}"; \
+			$(HELM) template voxlattice $(CHART) --namespace voxlattice \
+				--api-versions monitoring.coreos.com/v1 \
+				--api-versions cert-manager.io/v1 \
+				--api-versions traefik.io/v1alpha1 \
+				$${options} \
+			| $(KUBECONFORM) -strict -summary -ignore-missing-schemas \
+				-kubernetes-version $(CHART_KUBERNETES_VERSION); \
+		done
 
 down: ## Stop the Compose deployment
 	@set -eu; \

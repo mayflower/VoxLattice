@@ -61,6 +61,24 @@ jobs:
           -f deploy/docker-compose.tls.yml
           -f deploy/docker-compose.mtls.yml
           config --quiet
+      - name: Validate Kubernetes chart
+        env:
+          HELM_VERSION: 4.2.2
+          HELM_SHA256: 9adafecab4d406853bba163a70e9f104f47dbbf65ce24b7653bae7e36150bcb6
+          KUBECONFORM_VERSION: 0.8.0
+          KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
+        run: |
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+            "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz" \
+            --output /tmp/helm.tar.gz
+          echo "${HELM_SHA256}  /tmp/helm.tar.gz" | sha256sum --check
+          tar -xzf /tmp/helm.tar.gz -C /tmp linux-amd64/helm
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+            "https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            --output /tmp/kubeconform.tar.gz
+          echo "${KUBECONFORM_SHA256}  /tmp/kubeconform.tar.gz" | sha256sum --check
+          tar -xzf /tmp/kubeconform.tar.gz -C /tmp kubeconform
+          make helm-check HELM=/tmp/linux-amd64/helm KUBECONFORM=/tmp/kubeconform
       - run: make check
       - run: make test
       - run: make test-integration

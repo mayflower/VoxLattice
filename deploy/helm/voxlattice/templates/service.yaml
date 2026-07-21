@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "voxlattice.fullname" . }}
+  labels:
+    {{- include "voxlattice.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: grpc
+      port: {{ .Values.server.grpcPort }}
+      targetPort: grpc
+      protocol: TCP
+      {{- if eq .Values.tls.mode "insecure" }}
+      appProtocol: kubernetes.io/h2c
+      {{- end }}
+    - name: http
+      port: {{ .Values.server.httpPort }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "voxlattice.selectorLabels" . | nindent 4 }}
+{{- if .Values.service.headless.enabled }}
+---
+# Resolves to individual pod addresses for clients that perform their own
+# load balancing. Clients using the default pick_first policy should dial the
+# ClusterIP Service above instead, so that separate connections are spread
+# across ready pods.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "voxlattice.headlessServiceName" . }}
+  labels:
+    {{- include "voxlattice.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: false
+  ports:
+    - name: grpc
+      port: {{ .Values.server.grpcPort }}
+      targetPort: grpc
+      protocol: TCP
+      {{- if eq .Values.tls.mode "insecure" }}
+      appProtocol: kubernetes.io/h2c
+      {{- end }}
+  selector:
+    {{- include "voxlattice.selectorLabels" . | nindent 4 }}
+{{- end }}

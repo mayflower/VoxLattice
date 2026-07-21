@@ -1,0 +1,25 @@
+{{- if and .Values.serviceMonitor.enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "voxlattice.fullname" . }}
+  labels:
+    {{- include "voxlattice.labels" . | nindent 4 }}
+    {{- with .Values.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      {{- include "voxlattice.selectorLabels" . | nindent 6 }}
+  endpoints:
+    # /metrics is unauthenticated and carries no audio, token, stream or
+    # participant identifiers.
+    - port: http
+      path: /metrics
+      interval: {{ .Values.serviceMonitor.interval | quote }}
+      scrapeTimeout: {{ .Values.serviceMonitor.scrapeTimeout | quote }}
+{{- end }}

@@ -4,6 +4,9 @@ This guide covers source-based Docker deployment. VoxLattice does not download
 model weights during server startup: the verified checkpoint is prepared before
 the image is built and copied into the image.
 
+For cluster deployment with Helm or ArgoCD, see
+[Kubernetes deployment](kubernetes.md).
+
 ## Prerequisites
 
 Install Git, Python 3.12 or 3.13, Docker, Docker Compose, an NVIDIA driver, and NVIDIA

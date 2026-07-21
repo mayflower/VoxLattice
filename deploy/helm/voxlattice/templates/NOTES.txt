@@ -1,0 +1,50 @@
+VoxLattice {{ default .Chart.AppVersion .Values.image.tag }} is deploying into namespace {{ .Release.Namespace }}.
+
+Startup performs model verification, CUDA warm-up and a state-isolation self
+test before the health endpoints bind. Expect the first readiness to take a
+while:
+
+  kubectl -n {{ .Release.Namespace }} rollout status deployment/{{ include "voxlattice.fullname" . }}
+
+In-cluster gRPC endpoint:
+
+  dns:///{{ include "voxlattice.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.server.grpcPort }}
+{{- if .Values.service.headless.enabled }}
+
+Pod addresses, for clients doing their own load balancing:
+
+  dns:///{{ include "voxlattice.headlessServiceName" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.server.grpcPort }}
+{{- end }}
+{{- if .Values.ingressRoute.enabled }}
+
+External gRPC endpoint:
+
+  dns:///{{ .Values.ingressRoute.host }}:443
+{{- end }}
+
+{{- if eq .Values.tls.mode "certManager" }}
+{{- if not .Values.tls.certManager.issuerRef }}
+
+The server certificate is signed by a CA created inside this namespace.
+In-cluster clients must trust it. Export the bundle with:
+
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "voxlattice.tlsSecretName" . }} \
+    -o jsonpath='{.data.ca\.crt}' | base64 -d > voxlattice-ca.crt
+
+Pass it to the LiveKit plugin as root_certificates.
+{{- end }}
+{{- else if eq .Values.tls.mode "insecure" }}
+
+WARNING: tls.mode is "insecure". gRPC traffic, including the bearer token, is
+sent unencrypted. Restrict access with networkPolicy.enabled and never expose
+this deployment outside a trusted network.
+{{- end }}
+
+{{- if not .Values.auth.existingSecret }}
+
+WARNING: the bearer token was taken from auth.token and is stored in plain text
+wherever these values live. Use auth.existingSecret with a managed Secret for
+anything beyond local evaluation.
+{{- end }}
+
+Health and metrics are served on port {{ .Values.server.httpPort }} at /healthz, /readyz and /metrics.

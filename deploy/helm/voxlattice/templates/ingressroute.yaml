@@ -1,0 +1,64 @@
+{{- if .Values.ingressRoute.enabled }}
+{{- $fullName := include "voxlattice.fullname" . }}
+{{- $tlsSecret := default (printf "%s-ingress-tls" $fullName) .Values.ingressRoute.certificate.secretName }}
+{{- if .Values.ingressRoute.certificate.enabled }}
+# An IngressRoute does not honour the cert-manager ingress annotation, so the
+# edge certificate for the public hostname is requested explicitly.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ printf "%s-ingress" $fullName }}
+  labels:
+    {{- include "voxlattice.labels" . | nindent 4 }}
+spec:
+  secretName: {{ $tlsSecret }}
+  dnsNames:
+    - {{ .Values.ingressRoute.host | quote }}
+  issuerRef:
+    name: {{ required "ingressRoute.certificate.issuerRef.name is required" .Values.ingressRoute.certificate.issuerRef.name }}
+    kind: {{ default "ClusterIssuer" .Values.ingressRoute.certificate.issuerRef.kind }}
+    group: {{ default "cert-manager.io" .Values.ingressRoute.certificate.issuerRef.group }}
+---
+{{- end }}
+# Traefik terminates the publicly trusted certificate at the edge and opens a
+# separate TLS connection to the pod, negotiating HTTP/2 over ALPN. The backend
+# certificate is validated against the in-cluster name it was issued for.
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "voxlattice.labels" . | nindent 4 }}
+spec:
+  serverName: {{ include "voxlattice.serviceFQDN" . | quote }}
+  {{- if .Values.ingressRoute.serversTransport.insecureSkipVerify }}
+  insecureSkipVerify: true
+  {{- else }}
+  rootCAsSecrets:
+    - {{ include "voxlattice.tlsSecretName" . }}
+  {{- end }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "voxlattice.labels" . | nindent 4 }}
+  {{- with .Values.ingressRoute.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  entryPoints:
+    {{- toYaml .Values.ingressRoute.entryPoints | nindent 4 }}
+  routes:
+    - match: Host(`{{ .Values.ingressRoute.host }}`)
+      kind: Rule
+      services:
+        - name: {{ $fullName }}
+          port: {{ .Values.server.grpcPort }}
+          scheme: https
+          serversTransport: {{ $fullName }}
+  tls:
+    secretName: {{ $tlsSecret }}
+{{- end }}

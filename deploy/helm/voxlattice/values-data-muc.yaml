@@ -1,0 +1,59 @@
+# Overlay for the data-muc cluster. Applied after values.yaml by the ArgoCD
+# Application in argocd/data-muc/platform-apps/voxlattice.yaml.
+#
+# The bearer token is not part of this file. Create the Secret it references
+# out of band before the first sync; see docs/kubernetes.md.
+
+image:
+  # Immutable tag; bump together with a tested release.
+  tag: sha-0ae131a74803945d92f59b897cf88d67e5232022
+
+auth:
+  existingSecret: voxlattice-api-token
+  secretKey: api-token
+
+gpu:
+  enabled: true
+  runtimeClassName: nvidia
+  resourceName: nvidia.com/gpu
+  resourceCount: 1
+  mps:
+    # The device plugin advertises five replicas per physical GPU, so clients
+    # must go through the MPS control daemon and cap their own VRAM share.
+    enabled: true
+    pinnedDeviceMemoryLimit: "0=8G"
+
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+
+# The chart default (Recreate) is kept deliberately. The device plugin
+# advertises five MPS units on the single GPU and four are already claimed by
+# other workloads, so this deployment takes the last one. A surge replica would
+# stay Pending forever and deadlock every rollout.
+
+resources:
+  requests:
+    cpu: "1"
+    memory: 2Gi
+  limits:
+    cpu: "4"
+    memory: 8Gi
+
+ingressRoute:
+  enabled: true
+  host: voxlattice.data.mayflower.zone
+  entryPoints:
+    - websecure
+  certificate:
+    enabled: true
+    issuerRef:
+      name: letsencrypt-intern-dns
+      kind: ClusterIssuer
+    secretName: voxlattice-tls
+
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s

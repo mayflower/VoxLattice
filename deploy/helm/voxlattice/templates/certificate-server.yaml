@@ -1,0 +1,76 @@
+{{- if eq .Values.tls.mode "certManager" }}
+{{- $issuerRef := .Values.tls.certManager.issuerRef }}
+{{- if not $issuerRef }}
+# Public ACME issuers cannot sign .svc.cluster.local names, so the chart
+# bootstraps a namespace-local CA and issues the server certificate from it.
+# Clients must trust the resulting ca.crt.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "voxlattice.selfSignedIssuerName" . }}
+  labels:
+    {{- include "voxlattice.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "voxlattice.caIssuerName" . }}
+  labels:
+    {{- include "voxlattice.labels" . | nindent 4 }}
+spec:
+  isCA: true
+  commonName: {{ printf "%s issuing CA" (include "voxlattice.fullname" .) | quote }}
+  secretName: {{ include "voxlattice.caSecretName" . }}
+  duration: 43800h
+  renewBefore: 720h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: {{ include "voxlattice.selfSignedIssuerName" . }}
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "voxlattice.caIssuerName" . }}
+  labels:
+    {{- include "voxlattice.labels" . | nindent 4 }}
+spec:
+  ca:
+    secretName: {{ include "voxlattice.caSecretName" . }}
+---
+{{- end }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ printf "%s-server" (include "voxlattice.fullname" .) }}
+  labels:
+    {{- include "voxlattice.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "voxlattice.tlsSecretName" . }}
+  commonName: {{ include "voxlattice.serviceFQDN" . | quote }}
+  duration: {{ .Values.tls.certManager.duration }}
+  renewBefore: {{ .Values.tls.certManager.renewBefore }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  usages:
+    - server auth
+  dnsNames:
+    {{- include "voxlattice.certificateDnsNames" . | nindent 4 }}
+  issuerRef:
+    {{- if $issuerRef }}
+    name: {{ required "tls.certManager.issuerRef.name is required" $issuerRef.name }}
+    kind: {{ default "Issuer" $issuerRef.kind }}
+    group: {{ default "cert-manager.io" $issuerRef.group }}
+    {{- else }}
+    name: {{ include "voxlattice.caIssuerName" . }}
+    kind: Issuer
+    group: cert-manager.io
+    {{- end }}
+{{- end }}

@@ -1,0 +1,223 @@
+{{- include "voxlattice.validate" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "voxlattice.fullname" . }}
+  labels:
+    {{- include "voxlattice.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    {{- toYaml .Values.deploymentStrategy | nindent 4 }}
+  selector:
+    matchLabels:
+      {{- include "voxlattice.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- if not .Values.auth.existingSecret }}
+        checksum/auth: {{ include (print $.Template.BasePath "/secret-auth.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "voxlattice.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "voxlattice.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- if and .Values.gpu.enabled .Values.gpu.runtimeClassName }}
+      runtimeClassName: {{ .Values.gpu.runtimeClassName }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ include "voxlattice.terminationGracePeriodSeconds" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        # Grants the unprivileged user read access to the mounted Secret files.
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ include "voxlattice.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.server.grpcPort }}
+              protocol: TCP
+            - name: http
+              containerPort: {{ .Values.server.httpPort }}
+              protocol: TCP
+          env:
+            - name: FASTENHANCER_API_TOKEN_FILE
+              value: /run/secrets/voxlattice/{{ .Values.auth.secretKey }}
+            - name: GRPC_PORT
+              value: {{ .Values.server.grpcPort | quote }}
+            - name: HTTP_PORT
+              value: {{ .Values.server.httpPort | quote }}
+            - name: CUDA_DEVICE
+              value: {{ .Values.server.cudaDevice | quote }}
+            {{- if eq .Values.tls.mode "insecure" }}
+            - name: ALLOW_INSECURE_GRPC
+              value: "true"
+            {{- else }}
+            - name: ALLOW_INSECURE_GRPC
+              value: "false"
+            - name: TLS_CERTIFICATE
+              value: {{ printf "%s/tls.crt" .Values.tls.mountPath | quote }}
+            - name: TLS_PRIVATE_KEY
+              value: {{ printf "%s/tls.key" .Values.tls.mountPath | quote }}
+            {{- if .Values.tls.clientCA.enabled }}
+            - name: TLS_CLIENT_CA
+              value: {{ printf "%s/client-ca/%s" .Values.tls.mountPath .Values.tls.clientCA.secretKey | quote }}
+            {{- end }}
+            {{- end }}
+            - name: MAX_ACTIVE_STREAMS
+              value: {{ .Values.server.maxActiveStreams | quote }}
+            - name: MAX_BATCH_SIZE
+              value: {{ .Values.server.maxBatchSize | quote }}
+            - name: MAX_BATCH_WAIT_MS
+              value: {{ .Values.server.maxBatchWaitMs | quote }}
+            - name: MAX_PENDING_AUDIO_MS_PER_STREAM
+              value: {{ .Values.server.maxPendingAudioMsPerStream | quote }}
+            - name: MAX_OUTPUT_AUDIO_MS_PER_STREAM
+              value: {{ .Values.server.maxOutputAudioMsPerStream | quote }}
+            - name: STREAM_IDLE_TIMEOUT_S
+              value: {{ .Values.server.streamIdleTimeoutS | quote }}
+            - name: MAX_AUDIO_CHUNK_SAMPLES
+              value: {{ .Values.server.maxAudioChunkSamples | quote }}
+            - name: GRACEFUL_SHUTDOWN_S
+              value: {{ .Values.server.gracefulShutdownS | quote }}
+            {{- if .Values.gpu.enabled }}
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: "all"
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: "compute,utility"
+            {{- if .Values.gpu.mps.enabled }}
+            - name: CUDA_MPS_PIPE_DIRECTORY
+              value: {{ printf "%s/%s/pipe" .Values.gpu.mps.mountPath .Values.gpu.resourceName | quote }}
+            {{- with .Values.gpu.mps.pinnedDeviceMemoryLimit }}
+            - name: CUDA_MPS_PINNED_DEVICE_MEM_LIMIT
+              value: {{ . | quote }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          # The HTTP listener binds only after model verification, CUDA warm-up
+          # and the state-isolation self test, so liveness and readiness are
+          # gated behind the startup probe.
+          startupProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            {{- toYaml .Values.startupProbe | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- $resources := deepCopy .Values.resources }}
+            {{- if .Values.gpu.enabled }}
+            {{- $limits := merge (dict .Values.gpu.resourceName .Values.gpu.resourceCount) (default (dict) $resources.limits) }}
+            {{- $resources = merge (dict "limits" $limits) $resources }}
+            {{- end }}
+            {{- toYaml $resources | nindent 12 }}
+          volumeMounts:
+            - name: api-token
+              mountPath: /run/secrets/voxlattice
+              readOnly: true
+            {{- if ne .Values.tls.mode "insecure" }}
+            - name: tls
+              mountPath: {{ .Values.tls.mountPath }}
+              readOnly: true
+            {{- if .Values.tls.clientCA.enabled }}
+            - name: client-ca
+              mountPath: {{ printf "%s/client-ca" .Values.tls.mountPath }}
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            # The root filesystem is read only; the runtime still needs a
+            # writable temporary directory.
+            - name: tmp
+              mountPath: /tmp
+            {{- if and .Values.gpu.enabled .Values.gpu.mps.enabled }}
+            - name: mps
+              mountPath: {{ .Values.gpu.mps.mountPath }}
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: api-token
+          secret:
+            secretName: {{ include "voxlattice.authSecretName" . }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.auth.secretKey }}
+                path: {{ .Values.auth.secretKey }}
+        {{- if ne .Values.tls.mode "insecure" }}
+        - name: tls
+          secret:
+            secretName: {{ include "voxlattice.tlsSecretName" . }}
+            defaultMode: 0440
+        {{- if .Values.tls.clientCA.enabled }}
+        - name: client-ca
+          secret:
+            secretName: {{ .Values.tls.clientCA.existingSecret }}
+            defaultMode: 0440
+        {{- end }}
+        {{- end }}
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi
+        {{- if and .Values.gpu.enabled .Values.gpu.mps.enabled }}
+        - name: mps
+          hostPath:
+            path: {{ .Values.gpu.mps.hostPath }}
+            type: DirectoryOrCreate
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
