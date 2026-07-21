@@ -35,7 +35,7 @@ jobs:
       - name: Build image when model cache is available
         run: make model image
       - id: container-scan
-        uses: anchore/scan-action@df395807f4554463d4455b8047cf58e37b6acaae
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
         with:
           image: voxlattice:0.1.0
           fail-build: true
