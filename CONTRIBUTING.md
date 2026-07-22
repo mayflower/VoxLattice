@@ -57,6 +57,10 @@ Generated protobuf files must match `proto/fastenhancer/v1/enhancement.proto`.
 Use `make proto` after an intentional schema change and never reuse published
 field numbers.
 
+When changing the Kubernetes chart under `deploy/helm/`, run `make helm-check`;
+it lints the chart and validates every manifest it renders. CI runs the same
+target.
+
 ## Pull requests
 
 A pull request should explain the problem, the chosen solution, risk to audio

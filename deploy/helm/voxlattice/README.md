@@ -32,6 +32,7 @@ helm upgrade --install voxlattice deploy/helm/voxlattice \
 | `gpu.runtimeClassName` | `""` | Set to `nvidia` where a RuntimeClass is required |
 | `gpu.mps.enabled` | `false` | Mount the MPS control directory |
 | `gpu.mps.pinnedDeviceMemoryLimit` | `""` | VRAM cap, for example `0=8G` |
+| `podSecurityContext` | non-root, UID/GID 65532 | Override (e.g. `runAsUser: 0`) where NVIDIA MPS requires matching the server's UID |
 | `service.headless.enabled` | `false` | Pod addresses for client-side load balancing |
 | `ingressRoute.enabled` | `false` | Publish gRPC through a Traefik IngressRoute |
 | `serviceMonitor.enabled` | `false` | Register `/metrics` with the Prometheus Operator |
