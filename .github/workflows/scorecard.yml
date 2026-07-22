@@ -18,7 +18,7 @@ concurrency:
 jobs:
   analysis:
     name: Scorecard analysis
-    runs-on: ubuntu-24.04
+    runs-on: mayflower-k8s-runners
     timeout-minutes: 15
     permissions:
       contents: read

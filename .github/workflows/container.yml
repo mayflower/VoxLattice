@@ -19,7 +19,7 @@ env:
 jobs:
   publish:
     name: Build and publish linux/amd64 image
-    runs-on: ubuntu-24.04
+    runs-on: mayflower-k8s-runners
     timeout-minutes: 60
     permissions:
       artifact-metadata: write # Link the attested image to the organization.
