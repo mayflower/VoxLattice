@@ -135,6 +135,16 @@ The most relevant client setting is `response_wait_ms`:
 - Lower values reduce blocking but increase raw fallback during latency spikes.
 - Higher values allow more remote jitter but directly add to processing latency.
 
+Set it from the server's measured per-hop latency, not from a guess. The server
+exposes that latency as the `fastenhancer_hop_end_to_end_seconds` histogram; if
+the average or high percentiles exceed `response_wait_ms`, every interval falls
+back to raw and `raw_fallback_samples` dominates `enhanced_samples` even though
+the server is enhancing correctly. Inference is only part of that hop: on a GPU
+shared through NVIDIA MPS, scheduling and queueing can raise the end-to-end hop
+to several times the inference time, so the 12 ms default is frequently too low.
+Run the agent close to the server, raise `response_wait_ms` to cover the hop, or
+give the server less-contended GPU capacity.
+
 `max_buffer_ms` and `max_request_queue_ms` are safety bounds, not capacity
 controls. If queues overflow or fallback remains high, benchmark and scale the
 server rather than growing buffers indefinitely. All plugin options and defaults

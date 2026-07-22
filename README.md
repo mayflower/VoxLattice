@@ -130,6 +130,32 @@ For remote access, configure TLS and intentionally change the gRPC bind
 address. Do not expose the plaintext local Compose configuration to a network.
 See [Operations](docs/operations.md) and [Configuration](docs/configuration.md).
 
+## Measure the enhancement
+
+`tools/denoise_check.py` streams a clip through a running server and reports how
+much noise it removed. It first writes a deterministic 16 kHz speech-plus-noise
+clip, then compares the silence-gap noise floor before and after enhancement:
+
+```bash
+python tools/denoise_check.py generate noisy.wav
+make enhance INPUT=noisy.wav OUTPUT=enhanced.wav
+python tools/denoise_check.py measure noisy.wav enhanced.wav
+```
+
+Against the published CUDA image this reduces the silence-gap noise floor by
+roughly 34 dB while leaving the speech level essentially unchanged. Point the
+included gRPC client at a remote endpoint with `--endpoint`, `--tls`, and
+`--api-key` to measure a deployed service instead of the local Compose one.
+
+The real-time LiveKit plugin has a stricter requirement than this offline
+check: for each output interval it waits only `response_wait_ms` (12 ms by
+default) for the enhanced samples before emitting the raw input. The server's
+per-hop latency must fit inside that window, and on a shared GPU the scheduling
+overhead can push it well past 12 ms even though inference itself is ~11 ms. Run
+the agent close to the server and raise `response_wait_ms` to match the measured
+hop latency, or reduce GPU contention. See
+[LiveKit integration](docs/livekit.md#delay-and-fallback-behavior).
+
 ## Install the LiveKit plugin
 
 Install the plugin and its protocol package directly from GitHub:
