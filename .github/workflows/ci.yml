@@ -21,14 +21,14 @@ jobs:
       matrix:
         python: ["3.12", "3.13"]
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Install make
         # The shared runner image is minimal; every other tool this job needs
         # (python3, docker, git, uv via setup-uv) is already present.
         run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends make
-      - uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6 # v6.6.1
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           version: "0.11.7"
           python-version: ${{ matrix.python }}
@@ -97,6 +97,6 @@ jobs:
           /tmp/wheel-test/bin/python -c "from fastenhancer.v1 import enhancement_pb2; from fastenhancer_server.main import main; from livekit.plugins import fastenhancer; assert callable(main); print(fastenhancer.__version__, enhancement_pb2.DESCRIPTOR.package)"
       - run: make audit
       - name: Dockerfile lint
-        uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
+        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
         with:
           dockerfile: services/fastenhancer-server/Dockerfile
