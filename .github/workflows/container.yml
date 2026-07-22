@@ -32,6 +32,10 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install make
+        # The shared runner image is minimal; every other tool this job needs
+        # (python3, docker, git, uv via setup-uv) is already present.
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends make
       - name: Prepare the verified model
         run: make model
 

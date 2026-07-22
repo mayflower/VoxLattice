@@ -26,6 +26,10 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+      - name: Install make
+        # The shared runner image is minimal; every other tool this job needs
+        # (python3, docker, git, uv via setup-uv) is already present.
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends make
       - uses: astral-sh/setup-uv@557e51de59eb14aaaba2ed9621916900a91d50c6 # v6.6.1
         with:
           version: "0.11.7"
