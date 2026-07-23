@@ -426,8 +426,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "grpcio", specifier = "==1.70.0" },
-    { name = "protobuf", specifier = "==5.29.6" },
+    { name = "grpcio", specifier = ">=1.70,<2" },
+    { name = "protobuf", specifier = ">=5.29.6,<7" },
 ]
 
 [[package]]
@@ -889,7 +889,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastenhancer-protocol", editable = "generated" },
-    { name = "grpcio", specifier = "==1.70.0" },
+    { name = "grpcio", specifier = ">=1.70,<2" },
     { name = "livekit", specifier = ">=1.1.13,<1.2" },
 ]
 
