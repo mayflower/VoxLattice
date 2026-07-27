@@ -123,8 +123,13 @@ protects the connection; the token authorizes access to the service.
 
 The local Compose setup obtains `FASTENHANCER_API_TOKEN` from the host
 environment or `deploy/.env` and exposes it to the container through a mounted
-secret file. For production, use the secret facility provided by the
-orchestrator and set `FASTENHANCER_API_TOKEN_FILE` to the mounted path.
+secret file. The `token-file` target materialises it at
+`deploy/.secrets/api-token` — gitignored, mode `0444` so the container's
+non-root user (65532) can read it — and every Compose target depends on it.
+An `environment:`-backed Compose secret is not an option here: Docker Compose
+rejects those for services with `read_only: true`. For production, use the
+secret facility provided by the orchestrator and set
+`FASTENHANCER_API_TOKEN_FILE` to the mounted path.
 
 Use a unique, randomly generated token of at least 16 characters. Rotate it by
 replacing the mounted secret and gracefully restarting the service. Never add

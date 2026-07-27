@@ -10,8 +10,9 @@ KUBECONFORM := kubeconform
 CHART := deploy/helm/voxlattice
 CHART_KUBERNETES_VERSION := 1.32.0
 CHART_TEST_TOKEN := helm-render-validation-token
+TOKEN_FILE := deploy/.secrets/api-token
 
-.PHONY: help bootstrap check workflow-check vendor-check format proto proto-check test test-integration audit model wheels image up smoke enhance compose-test test-gpu benchmark helm-check down clean
+.PHONY: help bootstrap check workflow-check vendor-check format proto proto-check test test-integration audit model wheels image up smoke enhance compose-test test-gpu benchmark helm-check token-file down clean
 
 help:
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "%-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -68,17 +69,24 @@ wheels: ## Build all distributable Python wheels
 image: model ## Build the pinned server image
 	docker build --pull=false -f services/fastenhancer-server/Dockerfile -t voxlattice:0.1.0 .
 
-up: model ## Build and start the local GPU Compose deployment
+token-file: ## Write FASTENHANCER_API_TOKEN to the gitignored Compose secret file
 	@set -eu; \
 		if [ -f deploy/.env ]; then set -a; . deploy/.env; set +a; fi; \
 		test -n "$${FASTENHANCER_API_TOKEN:-}" || (echo "FASTENHANCER_API_TOKEN or deploy/.env is required" >&2; exit 2); \
+		install -d -m 0755 "$$(dirname $(TOKEN_FILE))"; \
+		rm -f $(TOKEN_FILE); \
+		printf '%s' "$${FASTENHANCER_API_TOKEN}" > $(TOKEN_FILE); \
+		chmod 0444 $(TOKEN_FILE)
+
+up: model token-file ## Build and start the local GPU Compose deployment
+	@set -eu; \
+		if [ -f deploy/.env ]; then set -a; . deploy/.env; set +a; fi; \
 		test -n "$${FASTENHANCER_GPU_DEVICE_ID:-}" || (echo "FASTENHANCER_GPU_DEVICE_ID or deploy/.env is required" >&2; exit 2); \
 		$(COMPOSE) up -d --build --wait --wait-timeout 120
 
-smoke: ## Stream deterministic PCM through the running server
+smoke: token-file ## Stream deterministic PCM through the running server
 	@set -eu; \
 		if [ -f deploy/.env ]; then set -a; . deploy/.env; set +a; fi; \
-		test -n "$${FASTENHANCER_API_TOKEN:-}" || (echo "FASTENHANCER_API_TOKEN or deploy/.env is required" >&2; exit 2); \
 		$(COMPOSE) --profile test run --rm smoke
 
 enhance: ## Enhance INPUT WAV and write OUTPUT WAV through the running server
@@ -91,10 +99,9 @@ enhance: ## Enhance INPUT WAV and write OUTPUT WAV through the running server
 			--endpoint 127.0.0.1:$${FASTENHANCER_GRPC_PORT:-50051} \
 			--input "$(INPUT)" --output "$(OUTPUT)"
 
-compose-test: model ## Build, start, smoke-test, and stop the local GPU Compose stack
+compose-test: model token-file ## Build, start, smoke-test, and stop the local GPU Compose stack
 	@set -eu; \
 		if [ -f deploy/.env ]; then set -a; . deploy/.env; set +a; fi; \
-		test -n "$${FASTENHANCER_API_TOKEN:-}" || (echo "FASTENHANCER_API_TOKEN or deploy/.env is required" >&2; exit 2); \
 		test -n "$${FASTENHANCER_GPU_DEVICE_ID:-}" || (echo "FASTENHANCER_GPU_DEVICE_ID or deploy/.env is required" >&2; exit 2); \
 		trap '$(COMPOSE) --profile test down --remove-orphans' EXIT; \
 		FASTENHANCER_GRPC_PORT=0 FASTENHANCER_HTTP_PORT=0 \

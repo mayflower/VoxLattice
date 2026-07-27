@@ -12,6 +12,7 @@ models/prepared/
 artifacts/validation/*
 !artifacts/validation/.gitkeep
 .env
+deploy/.secrets/
 *.pem
 *.key
 .coverage

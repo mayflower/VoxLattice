@@ -80,5 +80,13 @@ services:
       - no-new-privileges:true
 
 secrets:
+  # Materialised from FASTENHANCER_API_TOKEN (host environment or deploy/.env)
+  # by `make token-file`, which every Compose target depends on. An
+  # `environment:` secret would be the obvious choice, but Docker Compose
+  # rejects it for a service with `read_only: true` ("cannot create secret
+  # ... in read-only service fastenhancer: `file` is the sole supported
+  # option"), and the read-only root filesystem is part of the hardening we
+  # keep. The file is gitignored and world-readable so the container's
+  # non-root user (65532) can read it.
   fastenhancer_api_token:
-    environment: FASTENHANCER_API_TOKEN
+    file: ./.secrets/api-token
