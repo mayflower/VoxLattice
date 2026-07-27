@@ -73,9 +73,9 @@ token-file: ## Write FASTENHANCER_API_TOKEN to the gitignored Compose secret fil
 	@set -eu; \
 		if [ -f deploy/.env ]; then set -a; . deploy/.env; set +a; fi; \
 		test -n "$${FASTENHANCER_API_TOKEN:-}" || (echo "FASTENHANCER_API_TOKEN or deploy/.env is required" >&2; exit 2); \
-		install -d -m 0755 "$$(dirname $(TOKEN_FILE))"; \
+		install -d -m 0700 "$$(dirname $(TOKEN_FILE))"; \
 		rm -f $(TOKEN_FILE); \
-		printf '%s' "$${FASTENHANCER_API_TOKEN}" > $(TOKEN_FILE); \
+		(umask 022; printf '%s' "$${FASTENHANCER_API_TOKEN}" > $(TOKEN_FILE)); \
 		chmod 0444 $(TOKEN_FILE)
 
 up: model token-file ## Build and start the local GPU Compose deployment
@@ -139,10 +139,11 @@ helm-check: ## Lint the Kubernetes chart and validate every manifest it renders
 				-kubernetes-version $(CHART_KUBERNETES_VERSION); \
 		done
 
-down: ## Stop the Compose deployment
+down: ## Stop the Compose deployment and remove the mounted token file
 	@set -eu; \
 		if [ -f deploy/.env ]; then set -a; . deploy/.env; set +a; fi; \
-		$(COMPOSE) down --remove-orphans
+		$(COMPOSE) down --remove-orphans; \
+		rm -f $(TOKEN_FILE)
 
 clean: ## Remove only generated build/test caches (model cache is preserved)
 	$(UV) run python tools/clean.py

@@ -51,9 +51,13 @@ VOXLATTICE_IMAGE=ghcr.io/mayflower/voxlattice:latest
 Start the published image without a local build:
 
 ```bash
+make token-file
 docker compose --env-file deploy/.env -f deploy/docker-compose.yml pull fastenhancer
 docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --no-build --wait
 ```
+
+`make token-file` writes the bearer token to the file the Compose secret
+mounts; the stack cannot start without it.
 
 Release images are also available under their full version and immutable Git
 SHA tags. Use a version tag instead of `latest` for reproducible deployments.

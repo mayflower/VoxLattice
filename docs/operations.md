@@ -66,6 +66,7 @@ VOXLATTICE_IMAGE=ghcr.io/mayflower/voxlattice:latest
 Then pull and start it without building locally:
 
 ```bash
+make token-file
 docker compose --env-file deploy/.env -f deploy/docker-compose.yml pull fastenhancer
 docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --no-build --wait
 ```
@@ -92,6 +93,7 @@ The certificate must cover the hostname used by clients. Start Compose with the
 TLS overlay:
 
 ```bash
+make token-file
 docker compose \
   --env-file deploy/.env \
   -f deploy/docker-compose.yml \
@@ -108,6 +110,7 @@ For mutual TLS, set `FASTENHANCER_TLS_CLIENT_CA` to the CA that signed trusted
 client certificates and add the mTLS overlay:
 
 ```bash
+make token-file
 docker compose \
   --env-file deploy/.env \
   -f deploy/docker-compose.yml \
