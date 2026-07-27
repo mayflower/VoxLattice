@@ -249,6 +249,44 @@ def test_utf8_metadata_truncation_is_byte_bounded_and_valid() -> None:
     assert truncated == "é" * 127
 
 
+def test_process_does_not_block_while_server_unreachable() -> None:
+    # Nothing listens on this port, so after the first refused connect the
+    # worker sits in BACKOFF and never delivers. Even with a large
+    # response_wait_ms, _process must not stall the caller (it runs on the
+    # agent's event loop): it falls back to raw immediately.
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    port = listener.getsockname()[1]
+    listener.close()
+
+    processor = RemoteFastEnhancer(
+        f"127.0.0.1:{port}",
+        api_key="plugin-test-token",
+        tls=False,
+        response_wait_ms=1000,
+    )
+    try:
+        # Wait until the worker has settled into the reconnect backoff loop, so
+        # the timed frame below is measured against a definitively-down server.
+        deadline = time.monotonic() + 3
+        while processor.transport_state != "backoff" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert processor.transport_state == "backoff"
+
+        # First frame produces no eligible output (within the 256-sample delay).
+        processor._process(frame([1] * 256))
+        started = time.monotonic()
+        # Second frame has eligible output but no enhanced audio can arrive.
+        output = processor._process(frame([2] * 256))
+        elapsed = time.monotonic() - started
+        assert elapsed < 0.2, f"blocked {elapsed:.3f}s despite unreachable server"
+        assert output.samples_per_channel == 256
+        assert processor.metrics["raw_fallback_samples"] == 256
+        assert processor.metrics["enhanced_samples"] == 0
+    finally:
+        processor._close()
+
+
 def test_close_cancels_stalled_readiness_rpc() -> None:
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))

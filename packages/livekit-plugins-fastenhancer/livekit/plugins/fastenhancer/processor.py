@@ -23,6 +23,10 @@ from .transport import (
 SAMPLE_RATE_HZ = 16_000
 ALGORITHMIC_DELAY_SAMPLES = 256
 
+# Transport states in which no enhanced audio can arrive for the current
+# window, so _process falls back to raw immediately instead of blocking.
+_NON_DELIVERING_STATES = frozenset({TransportState.BACKOFF, TransportState.CLOSED})
+
 
 @dataclass(frozen=True, slots=True)
 class RemoteFastEnhancerConfig:
@@ -282,6 +286,15 @@ class RemoteFastEnhancer(rtc.FrameProcessor[rtc.AudioFrame]):
             deadline = time.monotonic() + self.config.response_wait_ms / 1000.0
             enhanced = self._enhanced.read(output_start, output_samples) if output_samples else b""
             while output_samples and enhanced is None and not self._closed:
+                # While the server is unreachable the worker sits in BACKOFF
+                # between retries (and CLOSED once shut down); no enhanced audio
+                # can arrive for this window, so fall back to raw immediately
+                # rather than blocking the caller — which runs on its event
+                # loop — for the full response_wait_ms on every frame. DISCONNECTED
+                # and CONNECTING keep waiting: response_wait_ms is also meant to
+                # absorb initial connection latency at stream start.
+                if self._transport_state in _NON_DELIVERING_STATES:
+                    break
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     break
