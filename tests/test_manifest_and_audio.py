@@ -80,6 +80,17 @@ def test_local_compose_smoke_profile_selects_an_explicit_gpu() -> None:
     assert smoke["environment"]["FASTENHANCER_API_TOKEN_FILE"].startswith("/run/secrets/")
 
 
+def test_compose_secret_matches_the_path_the_makefile_writes() -> None:
+    """`docker compose config` resolves a missing bind source without error, so
+    a drift between the Makefile's TOKEN_FILE and the Compose secret would only
+    surface on a real `up`."""
+    compose = yaml.safe_load((ROOT / "deploy/docker-compose.yml").read_text())
+    secret = compose["secrets"]["fastenhancer_api_token"]
+    assert secret == {"file": "${FASTENHANCER_TOKEN_FILE:-./.secrets/api-token}"}
+    # The Compose path is relative to deploy/, the Makefile's to the repo root.
+    assert "TOKEN_FILE := deploy/.secrets/api-token" in (ROOT / "Makefile").read_text()
+
+
 def test_pcm_extremes_round_trip() -> None:
     value = bytes.fromhex("0080ffff00000100ff7f")
     decoded = pcm16le_to_float32(value)

@@ -80,18 +80,9 @@ services:
       - no-new-privileges:true
 
 secrets:
-  # A host file, like every other deployment path in this repository: the
-  # Helm chart mounts a Kubernetes Secret and the documented `docker run`
-  # invocation mounts FASTENHANCER_TOKEN_FILE. Compose used an
-  # `environment:` secret, which Docker Compose rejects for a service with
-  # `read_only: true` ("cannot create secret ... in read-only service
-  # fastenhancer: `file` is the sole supported option") — and the read-only
-  # root filesystem is part of the hardening we keep.
-  #
-  # Point FASTENHANCER_TOKEN_FILE at a file your secret manager produces, or
-  # leave it unset and let `make token-file` write the default from
-  # FASTENHANCER_API_TOKEN. That file is gitignored, lives in a 0700
-  # directory, and is mode 0444 so the container's non-root user (65532) can
-  # read it.
+  # Docker Compose rejects `environment:` secrets for a service with
+  # `read_only: true` ("`file` is the sole supported option"). Provide the
+  # file yourself via FASTENHANCER_TOKEN_FILE or let `make token-file` write
+  # the default — see the Secrets section of docs/operations.md.
   fastenhancer_api_token:
     file: ${FASTENHANCER_TOKEN_FILE:-./.secrets/api-token}

@@ -80,8 +80,10 @@ token-file: ## Write FASTENHANCER_API_TOKEN to the gitignored Compose secret fil
 		test -n "$${FASTENHANCER_API_TOKEN:-}" || (echo "FASTENHANCER_API_TOKEN or deploy/.env is required" >&2; exit 2); \
 		install -d -m 0700 "$$(dirname $(TOKEN_FILE))"; \
 		rm -f $(TOKEN_FILE); \
-		(umask 022; printf '%s' "$${FASTENHANCER_API_TOKEN}" > $(TOKEN_FILE)); \
+		printf '%s' "$${FASTENHANCER_API_TOKEN}" > $(TOKEN_FILE); \
 		chmod 0444 $(TOKEN_FILE)
+# The rm is what makes this repeatable: the 0444 file cannot be overwritten,
+# not even by its owner, so a rotated token would fail to be written.
 
 up: model token-file ## Build and start the local GPU Compose deployment
 	@set -eu; \

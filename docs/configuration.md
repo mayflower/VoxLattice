@@ -13,7 +13,8 @@ repository root, pass `--env-file deploy/.env`.
 
 | Variable | Default | Purpose |
 |---|---:|---|
-| `FASTENHANCER_API_TOKEN` | required | Bearer token exposed to the container as a Docker secret; minimum 16 characters |
+| `FASTENHANCER_API_TOKEN` | required | Bearer token, minimum 16 characters. `make token-file` writes it to the file Compose mounts as a Docker secret. Unused when `FASTENHANCER_TOKEN_FILE` is set |
+| `FASTENHANCER_TOKEN_FILE` | `deploy/.secrets/api-token` | Host file holding the token, mounted as the Docker secret. Point it at a file your secret manager renders. The container-side equivalent is `FASTENHANCER_API_TOKEN_FILE` below |
 | `FASTENHANCER_GPU_DEVICE_ID` | required | GPU UUID or index accepted by the NVIDIA Container Toolkit |
 | `FASTENHANCER_GRPC_BIND_ADDRESS` | `127.0.0.1` | Host address for the gRPC port |
 | `FASTENHANCER_GRPC_PORT` | `50051` | Host gRPC port |

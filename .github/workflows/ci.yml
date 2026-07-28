@@ -51,12 +51,7 @@ jobs:
         env:
           FASTENHANCER_API_TOKEN: ci-compose-validation-token
           FASTENHANCER_GPU_DEVICE_ID: GPU-ci-placeholder
-        # token-file runs first: the secret is a bind mount now, and `config`
-        # resolves even when the file is missing — only a real `up` fails. The
-        # target also asserts that the file it writes is the one Compose wants.
-        run: |
-          make token-file
-          docker compose -f deploy/docker-compose.yml --profile test config --quiet
+        run: docker compose -f deploy/docker-compose.yml --profile test config --quiet
       - name: Validate TLS Compose overlays
         env:
           FASTENHANCER_API_TOKEN: ci-compose-validation-token
