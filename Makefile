@@ -72,6 +72,11 @@ image: model ## Build the pinned server image
 token-file: ## Write FASTENHANCER_API_TOKEN to the gitignored Compose secret file
 	@set -eu; \
 		if [ -f deploy/.env ]; then set -a; . deploy/.env; set +a; fi; \
+		if [ -n "$${FASTENHANCER_TOKEN_FILE:-}" ]; then \
+			test -r "$${FASTENHANCER_TOKEN_FILE}" || \
+				(echo "FASTENHANCER_TOKEN_FILE=$${FASTENHANCER_TOKEN_FILE} is not readable" >&2; exit 2); \
+			exit 0; \
+		fi; \
 		test -n "$${FASTENHANCER_API_TOKEN:-}" || (echo "FASTENHANCER_API_TOKEN or deploy/.env is required" >&2; exit 2); \
 		install -d -m 0700 "$$(dirname $(TOKEN_FILE))"; \
 		rm -f $(TOKEN_FILE); \
@@ -143,7 +148,7 @@ down: ## Stop the Compose deployment and remove the mounted token file
 	@set -eu; \
 		if [ -f deploy/.env ]; then set -a; . deploy/.env; set +a; fi; \
 		$(COMPOSE) down --remove-orphans; \
-		rm -f $(TOKEN_FILE)
+		if [ -z "$${FASTENHANCER_TOKEN_FILE:-}" ]; then rm -f $(TOKEN_FILE); fi
 
 clean: ## Remove only generated build/test caches (model cache is preserved)
 	$(UV) run python tools/clean.py
