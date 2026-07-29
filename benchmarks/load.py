@@ -223,10 +223,10 @@ async def one_stream(
 
 
 def plugin_probe(
-    endpoint: str, token: str, duration_s: float, response_wait_ms: float
+    endpoint: str, token: str, duration_s: float, output_delay_ms: float
 ) -> dict[str, Any]:
     processor = RemoteFastEnhancer(
-        endpoint, api_key=token, tls=False, response_wait_ms=response_wait_ms
+        endpoint, api_key=token, tls=False, output_delay_ms=output_delay_ms
     )
     hop_count = max(4, round(duration_s / HOP_SECONDS))
     audio_hops = [sine_hop(997, index) for index in range(hop_count)]
@@ -251,7 +251,7 @@ def plugin_probe(
         "output_samples": output_samples,
         "eligible_samples": eligible,
         "fallback_ratio": fallback_ratio,
-        "response_wait_ms": response_wait_ms,
+        "output_delay_ms": output_delay_ms,
         "metrics": metrics,
     }
 

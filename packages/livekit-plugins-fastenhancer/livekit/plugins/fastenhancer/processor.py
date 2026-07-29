@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
@@ -26,10 +25,6 @@ logger = logging.getLogger(__name__)
 SAMPLE_RATE_HZ = 16_000
 ALGORITHMIC_DELAY_SAMPLES = 256
 
-# Transport states in which no enhanced audio can arrive for the current
-# window, so _process falls back to raw immediately instead of blocking.
-_NON_DELIVERING_STATES = frozenset({TransportState.BACKOFF, TransportState.CLOSED})
-
 
 @dataclass(frozen=True, slots=True)
 class RemoteFastEnhancerConfig:
@@ -40,7 +35,7 @@ class RemoteFastEnhancerConfig:
     client_certificate_chain: bytes | None = None
     client_private_key: bytes | None = field(default=None, repr=False)
     connect_timeout_s: float = 2.0
-    response_wait_ms: float = 12.0
+    output_delay_ms: float = 12.0
     max_buffer_ms: int = 500
     max_request_queue_ms: int = 500
     reconnect_min_delay_s: float = 0.1
@@ -52,7 +47,7 @@ class RemoteFastEnhancerConfig:
     def __post_init__(self) -> None:
         if not self.endpoint:
             raise ValueError("endpoint must not be empty")
-        if self.connect_timeout_s <= 0 or self.response_wait_ms < 0:
+        if self.connect_timeout_s <= 0 or self.output_delay_ms < 0:
             raise ValueError("timeouts must be positive")
         if self.max_buffer_ms < 32 or self.max_request_queue_ms < 16:
             raise ValueError("buffer bounds are too small for the model contract")
@@ -86,7 +81,7 @@ class RemoteFastEnhancer(rtc.FrameProcessor[rtc.AudioFrame]):
         client_certificate_chain: bytes | None = None,
         client_private_key: bytes | None = None,
         connect_timeout_s: float = 2.0,
-        response_wait_ms: float = 12.0,
+        output_delay_ms: float = 12.0,
         max_buffer_ms: int = 500,
         reconnect_min_delay_s: float = 0.1,
         reconnect_max_delay_s: float = 2.0,
@@ -104,7 +99,7 @@ class RemoteFastEnhancer(rtc.FrameProcessor[rtc.AudioFrame]):
             client_certificate_chain=client_certificate_chain,
             client_private_key=client_private_key,
             connect_timeout_s=connect_timeout_s,
-            response_wait_ms=response_wait_ms,
+            output_delay_ms=output_delay_ms,
             max_buffer_ms=max_buffer_ms,
             max_request_queue_ms=max_request_queue_ms,
             reconnect_min_delay_s=reconnect_min_delay_s,
@@ -113,6 +108,7 @@ class RemoteFastEnhancer(rtc.FrameProcessor[rtc.AudioFrame]):
             expected_model_revision=expected_model_revision,
             expected_model_sha256=expected_model_sha256,
         )
+        self._response_wait_samples = round(output_delay_ms * SAMPLE_RATE_HZ / 1000)
         self._lock = threading.RLock()
         self._condition = threading.Condition(self._lock)
         self._enabled = True
@@ -283,26 +279,20 @@ class RemoteFastEnhancer(rtc.FrameProcessor[rtc.AudioFrame]):
                 self._enhanced.clear()
             self._worker.force_reset()
         with self._condition:
-            eligible_until = max(0, self._input_cursor - ALGORITHMIC_DELAY_SAMPLES)
+            # Hold the output back by the response budget instead of waiting for
+            # it. rtc.FrameProcessor._process is synchronous and LiveKit calls it
+            # inline on the agent's event loop, so any wait here stalls TTS
+            # playout, barge-in and RPC handling for every frame. Reading a
+            # window that is already output_delay_ms old gives the server the
+            # same budget to answer, at the same end-to-end latency, without
+            # ever blocking the caller.
+            eligible_until = max(
+                0,
+                self._input_cursor - ALGORITHMIC_DELAY_SAMPLES - self._response_wait_samples,
+            )
             output_samples = min(sample_count, max(0, eligible_until - self._output_cursor))
             output_start = self._output_cursor
-            deadline = time.monotonic() + self.config.response_wait_ms / 1000.0
             enhanced = self._enhanced.read(output_start, output_samples) if output_samples else b""
-            while output_samples and enhanced is None and not self._closed:
-                # While the server is unreachable the worker sits in BACKOFF
-                # between retries (and CLOSED once shut down); no enhanced audio
-                # can arrive for this window, so fall back to raw immediately
-                # rather than blocking the caller — which runs on its event
-                # loop — for the full response_wait_ms on every frame. DISCONNECTED
-                # and CONNECTING keep waiting: response_wait_ms is also meant to
-                # absorb initial connection latency at stream start.
-                if self._transport_state in _NON_DELIVERING_STATES:
-                    break
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    break
-                self._condition.wait(remaining)
-                enhanced = self._enhanced.read(output_start, output_samples)
             if enhanced is None:
                 output = self._raw.read(output_start, output_samples)
                 self._metrics.raw_fallback_samples += output_samples

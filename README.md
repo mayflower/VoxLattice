@@ -152,11 +152,11 @@ included gRPC client at a remote endpoint with `--endpoint`, `--tls`, and
 `--api-key` to measure a deployed service instead of the local Compose one.
 
 The real-time LiveKit plugin has a stricter requirement than this offline
-check: for each output interval it waits only `response_wait_ms` (12 ms by
+check: for each output interval it allows only `output_delay_ms` (12 ms by
 default) for the enhanced samples before emitting the raw input. The server's
 per-hop latency must fit inside that window, and on a shared GPU the scheduling
 overhead can push it well past 12 ms even though inference itself is ~11 ms. Run
-the agent close to the server and raise `response_wait_ms` to match the measured
+the agent close to the server and raise `output_delay_ms` to match the measured
 hop latency, or reduce GPU contention. See
 [LiveKit integration](docs/livekit.md#delay-and-fallback-behavior).
 

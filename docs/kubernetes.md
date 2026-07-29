@@ -118,7 +118,7 @@ move a live track between endpoints: a gRPC stream carries per-stream model
 state and must stay on the pod that started it.
 
 Run the LiveKit agent in the cluster, next to the server. The real-time plugin
-waits only `response_wait_ms` for each interval's enhanced samples before
+allows only `output_delay_ms` for each interval's enhanced samples before
 emitting raw audio, and that window must cover the server's per-hop latency.
 Size it from the `fastenhancer_hop_end_to_end_seconds` histogram — on a
 GPU shared through MPS the hop runs several times the inference time, well past

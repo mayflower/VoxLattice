@@ -216,7 +216,7 @@ absolute sample offsets. See [Protocol](protocol.md).
 ### Frequent raw fallback in the LiveKit plugin
 
 Compare plugin fallback counters with server batch, inference, and queue
-latencies. Increase `response_wait_ms` only when the extra end-to-end latency is
+latencies. Increase `output_delay_ms` only when the extra end-to-end latency is
 acceptable. Do not treat larger unbounded queues as a capacity fix; benchmark
 and scale the service instead.
 

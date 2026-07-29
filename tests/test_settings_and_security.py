@@ -149,7 +149,7 @@ async def test_mutual_tls_requires_and_accepts_a_client_certificate(tmp_path: Pa
             root_certificates=root,
             client_certificate_chain=client_identity.cert_chain_pems[0].bytes(),
             client_private_key=client_identity.private_key_pem.bytes(),
-            response_wait_ms=500,
+            output_delay_ms=0,
         )
         try:
             value = rtc.AudioFrame(
@@ -158,6 +158,9 @@ async def test_mutual_tls_requires_and_accepts_a_client_certificate(tmp_path: Pa
                 num_channels=1,
                 samples_per_channel=512,
             )
+            # GetCapabilities above already proves the mTLS handshake; this only
+            # shows the audio path stays open afterwards. The frame carries
+            # 512 - 256 samples: the model delay, with no output budget on top.
             enhanced = await __import__("asyncio").to_thread(processor._process, value)
             assert enhanced.samples_per_channel == 256
         finally:

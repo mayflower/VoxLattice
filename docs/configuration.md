@@ -87,7 +87,7 @@ exactly one input track.
 | `client_certificate_chain` | `None` | PEM client certificate chain for mTLS |
 | `client_private_key` | `None` | Matching PEM client private-key bytes |
 | `connect_timeout_s` | `2.0` | Per-attempt connection timeout |
-| `response_wait_ms` | `12.0` | Time to wait for the exact enhanced interval before raw fallback |
+| `output_delay_ms` | `12.0` | How far the output trails the input, giving the server that long to answer before raw fallback. Never blocks the caller |
 | `max_buffer_ms` | `500` | Bound for the local raw/enhanced timeline |
 | `max_request_queue_ms` | `500` | Bound for queued outbound audio |
 | `reconnect_min_delay_s` | `0.1` | Initial reconnect delay |
