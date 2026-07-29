@@ -287,6 +287,38 @@ def test_process_does_not_block_while_server_unreachable() -> None:
         processor._close()
 
 
+def test_close_never_raises_into_the_event_loop() -> None:
+    """LiveKit closes an owned processor synchronously from the room's track
+    handlers, so a worker that refuses to stop must not break a track relink or
+    session shutdown — the same slow/unreachable server the raw fallback exists
+    to tolerate is exactly when the join times out."""
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    port = listener.getsockname()[1]
+    listener.close()
+
+    processor = RemoteFastEnhancer(
+        f"127.0.0.1:{port}",
+        api_key="plugin-test-token",
+        tls=False,
+    )
+
+    class StuckWorker:
+        closed = False
+
+        def close(self) -> None:
+            type(self).closed = True
+            raise RuntimeError("gRPC worker did not stop")
+
+    real_worker = processor._worker
+    processor._worker = StuckWorker()  # type: ignore[assignment]
+    try:
+        processor._close()  # must not raise
+        assert StuckWorker.closed
+    finally:
+        real_worker.close()
+
+
 def test_close_cancels_stalled_readiness_rpc() -> None:
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))

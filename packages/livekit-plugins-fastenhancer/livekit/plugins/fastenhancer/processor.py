@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from collections.abc import Mapping
@@ -19,6 +20,8 @@ from .transport import (
     TransportState,
     truncate_utf8,
 )
+
+logger = logging.getLogger(__name__)
 
 SAMPLE_RATE_HZ = 16_000
 ALGORITHMIC_DELAY_SAMPLES = 256
@@ -325,7 +328,17 @@ class RemoteFastEnhancer(rtc.FrameProcessor[rtc.AudioFrame]):
                 return
             self._closed = True
             self._condition.notify_all()
-        self._worker.close()
+        try:
+            self._worker.close()
+        except RuntimeError:
+            # LiveKit owns this processor and closes it synchronously from the
+            # room's track handlers and from RoomIO.aclose(). Letting this
+            # escape would abort a track relink mid-way — leaving the agent deaf
+            # on the participant's other tracks — or propagate out of session
+            # shutdown. The worker is signalled and its channel closed either
+            # way; a thread that outlives that is a leak, not a reason to break
+            # the call.
+            logger.warning("fastenhancer gRPC worker did not stop within the join timeout")
         with self._condition:
             self._enhanced.clear()
             self._raw.clear_at(self._input_cursor)
