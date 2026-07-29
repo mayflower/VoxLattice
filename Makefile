@@ -10,8 +10,9 @@ KUBECONFORM := kubeconform
 CHART := deploy/helm/voxlattice
 CHART_KUBERNETES_VERSION := 1.32.0
 CHART_TEST_TOKEN := helm-render-validation-token
+TOKEN_FILE := deploy/.secrets/api-token
 
-.PHONY: help bootstrap check workflow-check vendor-check format proto proto-check test test-integration audit model wheels image up smoke enhance compose-test test-gpu benchmark helm-check down clean
+.PHONY: help bootstrap check workflow-check vendor-check format proto proto-check test test-integration audit model wheels image up smoke enhance compose-test test-gpu benchmark helm-check token-file down clean
 
 help:
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "%-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -68,17 +69,31 @@ wheels: ## Build all distributable Python wheels
 image: model ## Build the pinned server image
 	docker build --pull=false -f services/fastenhancer-server/Dockerfile -t voxlattice:0.1.0 .
 
-up: model ## Build and start the local GPU Compose deployment
+token-file: ## Write FASTENHANCER_API_TOKEN to the gitignored Compose secret file
 	@set -eu; \
 		if [ -f deploy/.env ]; then set -a; . deploy/.env; set +a; fi; \
+		if [ -n "$${FASTENHANCER_TOKEN_FILE:-}" ]; then \
+			test -r "$${FASTENHANCER_TOKEN_FILE}" || \
+				(echo "FASTENHANCER_TOKEN_FILE=$${FASTENHANCER_TOKEN_FILE} is not readable" >&2; exit 2); \
+			exit 0; \
+		fi; \
 		test -n "$${FASTENHANCER_API_TOKEN:-}" || (echo "FASTENHANCER_API_TOKEN or deploy/.env is required" >&2; exit 2); \
+		install -d -m 0700 "$$(dirname $(TOKEN_FILE))"; \
+		rm -f $(TOKEN_FILE); \
+		printf '%s' "$${FASTENHANCER_API_TOKEN}" > $(TOKEN_FILE); \
+		chmod 0444 $(TOKEN_FILE)
+# The rm is what makes this repeatable: the 0444 file cannot be overwritten,
+# not even by its owner, so a rotated token would fail to be written.
+
+up: model token-file ## Build and start the local GPU Compose deployment
+	@set -eu; \
+		if [ -f deploy/.env ]; then set -a; . deploy/.env; set +a; fi; \
 		test -n "$${FASTENHANCER_GPU_DEVICE_ID:-}" || (echo "FASTENHANCER_GPU_DEVICE_ID or deploy/.env is required" >&2; exit 2); \
 		$(COMPOSE) up -d --build --wait --wait-timeout 120
 
-smoke: ## Stream deterministic PCM through the running server
+smoke: token-file ## Stream deterministic PCM through the running server
 	@set -eu; \
 		if [ -f deploy/.env ]; then set -a; . deploy/.env; set +a; fi; \
-		test -n "$${FASTENHANCER_API_TOKEN:-}" || (echo "FASTENHANCER_API_TOKEN or deploy/.env is required" >&2; exit 2); \
 		$(COMPOSE) --profile test run --rm smoke
 
 enhance: ## Enhance INPUT WAV and write OUTPUT WAV through the running server
@@ -91,10 +106,9 @@ enhance: ## Enhance INPUT WAV and write OUTPUT WAV through the running server
 			--endpoint 127.0.0.1:$${FASTENHANCER_GRPC_PORT:-50051} \
 			--input "$(INPUT)" --output "$(OUTPUT)"
 
-compose-test: model ## Build, start, smoke-test, and stop the local GPU Compose stack
+compose-test: model token-file ## Build, start, smoke-test, and stop the local GPU Compose stack
 	@set -eu; \
 		if [ -f deploy/.env ]; then set -a; . deploy/.env; set +a; fi; \
-		test -n "$${FASTENHANCER_API_TOKEN:-}" || (echo "FASTENHANCER_API_TOKEN or deploy/.env is required" >&2; exit 2); \
 		test -n "$${FASTENHANCER_GPU_DEVICE_ID:-}" || (echo "FASTENHANCER_GPU_DEVICE_ID or deploy/.env is required" >&2; exit 2); \
 		trap '$(COMPOSE) --profile test down --remove-orphans' EXIT; \
 		FASTENHANCER_GRPC_PORT=0 FASTENHANCER_HTTP_PORT=0 \
@@ -132,10 +146,11 @@ helm-check: ## Lint the Kubernetes chart and validate every manifest it renders
 				-kubernetes-version $(CHART_KUBERNETES_VERSION); \
 		done
 
-down: ## Stop the Compose deployment
+down: ## Stop the Compose deployment and remove the mounted token file
 	@set -eu; \
 		if [ -f deploy/.env ]; then set -a; . deploy/.env; set +a; fi; \
-		$(COMPOSE) down --remove-orphans
+		$(COMPOSE) down --remove-orphans; \
+		if [ -z "$${FASTENHANCER_TOKEN_FILE:-}" ]; then rm -f $(TOKEN_FILE); fi
 
 clean: ## Remove only generated build/test caches (model cache is preserved)
 	$(UV) run python tools/clean.py

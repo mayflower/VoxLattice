@@ -66,6 +66,7 @@ VOXLATTICE_IMAGE=ghcr.io/mayflower/voxlattice:latest
 Then pull and start it without building locally:
 
 ```bash
+make token-file
 docker compose --env-file deploy/.env -f deploy/docker-compose.yml pull fastenhancer
 docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --no-build --wait
 ```
@@ -92,6 +93,7 @@ The certificate must cover the hostname used by clients. Start Compose with the
 TLS overlay:
 
 ```bash
+make token-file
 docker compose \
   --env-file deploy/.env \
   -f deploy/docker-compose.yml \
@@ -108,6 +110,7 @@ For mutual TLS, set `FASTENHANCER_TLS_CLIENT_CA` to the CA that signed trusted
 client certificates and add the mTLS overlay:
 
 ```bash
+make token-file
 docker compose \
   --env-file deploy/.env \
   -f deploy/docker-compose.yml \
@@ -121,10 +124,18 @@ protects the connection; the token authorizes access to the service.
 
 ## Secrets
 
-The local Compose setup obtains `FASTENHANCER_API_TOKEN` from the host
-environment or `deploy/.env` and exposes it to the container through a mounted
-secret file. For production, use the secret facility provided by the
-orchestrator and set `FASTENHANCER_API_TOKEN_FILE` to the mounted path.
+Every deployment path mounts the bearer token as a file: the Helm chart
+mounts a Kubernetes Secret, the direct `docker run` invocation below mounts
+`FASTENHANCER_TOKEN_FILE`, and Compose mounts the same file as a Docker
+secret. An `environment:`-backed Compose secret is not an option — Docker
+Compose rejects those for services with `read_only: true`.
+
+Set `FASTENHANCER_TOKEN_FILE` in `deploy/.env` to a file your secret manager
+produces, and Compose mounts it as-is. Leave it unset and `make token-file`
+writes `deploy/.secrets/api-token` from `FASTENHANCER_API_TOKEN` instead —
+gitignored, in a `0700` directory, mode `0444` so the container's non-root
+user (65532) can read it. Every Compose target depends on that step; `make
+down` removes a generated file again but never touches one you supplied.
 
 Use a unique, randomly generated token of at least 16 characters. Rotate it by
 replacing the mounted secret and gracefully restarting the service. Never add
@@ -205,7 +216,7 @@ absolute sample offsets. See [Protocol](protocol.md).
 ### Frequent raw fallback in the LiveKit plugin
 
 Compare plugin fallback counters with server batch, inference, and queue
-latencies. Increase `response_wait_ms` only when the extra end-to-end latency is
+latencies. Increase `output_delay_ms` only when the extra end-to-end latency is
 acceptable. Do not treat larger unbounded queues as a capacity fix; benchmark
 and scale the service instead.
 

@@ -139,6 +139,23 @@ def sync_server() -> Iterator[str]:
         server.stop(0).wait()
 
 
+def settle(processor: RemoteFastEnhancer, samples: int = 1, timeout_s: float = 2.0) -> bool:
+    """Wait until the next `samples` of enhanced audio have arrived.
+
+    _process never waits for the server — it runs on the agent's event loop.
+    In production the gap between two frames (10-50ms) is the budget the answer
+    actually gets. These tests push frames back to back, so without this the
+    enhanced audio has had no wall-clock time to arrive at all.
+    """
+    deadline = time.monotonic() + timeout_s
+    with processor._condition:
+        while time.monotonic() < deadline:
+            if processor._enhanced.read(processor._output_cursor, samples) is not None:
+                return True
+            processor._condition.wait(0.01)
+    return False
+
+
 def frame(samples: list[int], userdata: dict[str, object] | None = None) -> rtc.AudioFrame:
     return rtc.AudioFrame(
         array.array("h", samples).tobytes(),
@@ -156,19 +173,28 @@ def test_frame_processor_enhanced_alignment_and_close(sync_server: str) -> None:
         sync_server,
         api_key="plugin-test-token",
         tls=False,
-        response_wait_ms=500,
+        output_delay_ms=32,
     )
     userdata = {"source": "test"}
     first_samples = list(range(512))
-    output = processor._process(frame(first_samples, userdata))
-    assert output.samples_per_channel == 256
-    assert list(output.data) == [-sample for sample in first_samples[:256]]
-    assert output.userdata is userdata
     second_samples = list(range(1000, 1512))
-    second = processor._process(frame(second_samples))
-    assert second.samples_per_channel == 512
-    assert list(second.data[:256]) == [-sample for sample in first_samples[256:]]
-    assert list(second.data[256:]) == [-sample for sample in second_samples[:256]]
+    third_samples = list(range(2000, 2512))
+
+    # The output trails the input by the 256-sample model delay plus the
+    # 512-sample (32ms) response budget, so the first frame carries nothing.
+    assert processor._process(frame(first_samples)).samples_per_channel == 0
+    assert settle(processor, 256)
+
+    second = processor._process(frame(second_samples, userdata))
+    assert second.samples_per_channel == 256
+    assert list(second.data) == [-sample for sample in first_samples[:256]]
+    assert second.userdata is userdata
+    assert settle(processor, 512)
+
+    third = processor._process(frame(third_samples))
+    assert third.samples_per_channel == 512
+    assert list(third.data[:256]) == [-sample for sample in first_samples[256:]]
+    assert list(third.data[256:]) == [-sample for sample in second_samples[:256]]
     assert processor.metrics["raw_fallback_samples"] == 0
     processor._close()
     processor._close()
@@ -182,7 +208,7 @@ def test_variable_first_output_and_raw_fallback(sync_server: str) -> None:
         sync_server,
         api_key="plugin-test-token",
         tls=False,
-        response_wait_ms=0,
+        output_delay_ms=0,
     )
     first = processor._process(frame([7] * 160))
     assert first.samples_per_channel == 0
@@ -205,7 +231,7 @@ def test_all_supported_livekit_frame_sizes(sync_server: str, frame_ms: int) -> N
         sync_server,
         api_key="plugin-test-token",
         tls=False,
-        response_wait_ms=100,
+        output_delay_ms=0,
     )
     try:
         first = processor._process(frame([100] * samples))
@@ -231,14 +257,19 @@ def test_silence_does_not_replace_final_delayed_speech(sync_server: str) -> None
         sync_server,
         api_key="plugin-test-token",
         tls=False,
-        response_wait_ms=500,
+        output_delay_ms=16,
     )
     try:
         speech = list(range(1, 513))
-        first = processor._process(frame(speech))
-        assert list(first.data) == [-sample for sample in speech[:256]]
-        silence = processor._process(frame([0] * 256))
-        assert list(silence.data) == [-sample for sample in speech[256:]]
+        assert processor._process(frame(speech)).samples_per_channel == 0
+        assert settle(processor, 256)
+        # The speech still owed from the first frame must survive the silence
+        # that follows it, rather than being overwritten by it.
+        first_half = processor._process(frame([0] * 256))
+        assert list(first_half.data) == [-sample for sample in speech[:256]]
+        assert settle(processor, 256)
+        second_half = processor._process(frame([0] * 256))
+        assert list(second_half.data) == [-sample for sample in speech[256:]]
     finally:
         processor._close()
 
@@ -247,6 +278,124 @@ def test_utf8_metadata_truncation_is_byte_bounded_and_valid() -> None:
     truncated = truncate_utf8("é" * 256, 255)
     assert len(truncated.encode("utf-8")) <= 255
     assert truncated == "é" * 127
+
+
+def test_process_does_not_block_while_server_unreachable() -> None:
+    # Nothing listens on this port, so after the first refused connect the
+    # worker sits in BACKOFF and never delivers. _process must not stall the
+    # caller (it runs on the agent's event loop): it falls back to raw.
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    port = listener.getsockname()[1]
+    listener.close()
+
+    processor = RemoteFastEnhancer(
+        f"127.0.0.1:{port}",
+        api_key="plugin-test-token",
+        tls=False,
+        output_delay_ms=12,
+    )
+    try:
+        # Wait until the worker has settled into the reconnect backoff loop, so
+        # the timed frame below is measured against a definitively-down server.
+        deadline = time.monotonic() + 3
+        while processor.transport_state != "backoff" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert processor.transport_state == "backoff"
+
+        # The output trails the input by the 256-sample model delay plus the
+        # 192-sample (12ms) response budget, so the first two frames are still
+        # inside it and the third is the first to carry a full frame.
+        processor._process(frame([1] * 256))
+        processor._process(frame([2] * 256))
+        started = time.monotonic()
+        output = processor._process(frame([3] * 256))
+        elapsed = time.monotonic() - started
+        assert elapsed < 0.2, f"blocked {elapsed:.3f}s despite unreachable server"
+        assert output.samples_per_channel == 256
+        assert processor.metrics["raw_fallback_samples"] == 320
+        assert processor.metrics["enhanced_samples"] == 0
+    finally:
+        processor._close()
+
+
+def test_close_never_raises_into_the_event_loop() -> None:
+    """LiveKit closes an owned processor synchronously from the room's track
+    handlers, so a worker that refuses to stop must not break a track relink or
+    session shutdown — the same slow/unreachable server the raw fallback exists
+    to tolerate is exactly when the join times out."""
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    port = listener.getsockname()[1]
+    listener.close()
+
+    processor = RemoteFastEnhancer(
+        f"127.0.0.1:{port}",
+        api_key="plugin-test-token",
+        tls=False,
+    )
+
+    class StuckWorker:
+        closed = False
+
+        def close(self) -> None:
+            type(self).closed = True
+            raise RuntimeError("gRPC worker did not stop")
+
+    real_worker = processor._worker
+    processor._worker = StuckWorker()  # type: ignore[assignment]
+    try:
+        processor._close()  # must not raise
+        assert StuckWorker.closed
+    finally:
+        real_worker.close()
+
+
+def test_process_does_not_block_while_server_is_reachable_but_silent() -> None:
+    # The unreachable case above short-circuits on the BACKOFF transport state.
+    # This is the case that state cannot catch: the connection is accepted, so
+    # the worker is CONNECTING/CONNECTED and enhanced audio is genuinely "on its
+    # way" — which is exactly when waiting for it looks reasonable and is not.
+    # _process runs inline on the agent's event loop, so a per-frame wait here
+    # stalls TTS playout and barge-in for every frame of the call.
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen()
+    listener.settimeout(2)
+    release = threading.Event()
+
+    def hold_connection() -> None:
+        try:
+            connection, _ = listener.accept()
+            with connection:
+                release.wait(5)
+        except OSError:
+            pass
+        finally:
+            listener.close()
+
+    holder = threading.Thread(target=hold_connection, daemon=True)
+    holder.start()
+    processor = RemoteFastEnhancer(
+        f"127.0.0.1:{listener.getsockname()[1]}",
+        api_key="plugin-test-token",
+        tls=False,
+        connect_timeout_s=5,
+        output_delay_ms=200,
+    )
+    try:
+        assert processor.transport_state not in {"backoff", "closed"}
+        # 200ms budget over five frames: the old wait-for-the-answer loop spent
+        # it on every frame, so this loop took ~1s. It must now be immediate.
+        started = time.monotonic()
+        for value in range(5):
+            processor._process(frame([value] * 256))
+        elapsed = time.monotonic() - started
+        assert elapsed < 0.1, f"blocked {elapsed:.3f}s on a reachable but silent server"
+    finally:
+        release.set()
+        processor._close()
+        holder.join(3)
 
 
 def test_close_cancels_stalled_readiness_rpc() -> None:
@@ -273,7 +422,7 @@ def test_close_cancels_stalled_readiness_rpc() -> None:
         api_key="plugin-test-token",
         tls=False,
         connect_timeout_s=5,
-        response_wait_ms=0,
+        output_delay_ms=0,
     )
     try:
         assert accepted.wait(2)
@@ -292,7 +441,7 @@ def test_capability_mismatch_falls_back_and_closes(sync_server: str) -> None:
         sync_server,
         api_key="plugin-test-token",
         tls=False,
-        response_wait_ms=0,
+        output_delay_ms=0,
         expected_model_sha256="0" * 64,
     )
     output = processor._process(frame([17] * 512))
@@ -310,7 +459,7 @@ def test_bounded_request_overflow_is_visible() -> None:
         api_key="plugin-test-token",
         tls=False,
         connect_timeout_s=0.05,
-        response_wait_ms=0,
+        output_delay_ms=0,
         max_request_queue_ms=16,
         reconnect_min_delay_s=0.01,
         reconnect_max_delay_s=0.02,
@@ -331,12 +480,14 @@ def test_reconnect_uses_new_generation_without_timeline_mix() -> None:
         api_key="plugin-test-token",
         tls=False,
         connect_timeout_s=0.05,
-        response_wait_ms=20,
+        output_delay_ms=20,
         reconnect_min_delay_s=0.01,
         reconnect_max_delay_s=0.02,
     )
-    first = processor._process(frame([21] * 512))
-    assert list(first.data) == [21] * 256
+    # Still inside the model delay plus the 320-sample (20ms) response budget.
+    assert processor._process(frame([21] * 512)).samples_per_channel == 0
+    # Raw, because nothing is listening yet.
+    assert list(processor._process(frame([21] * 256)).data) == [21] * 192
     server = grpc.server(ThreadPoolExecutor(max_workers=4))
     pb_grpc.add_EnhancementServiceServicer_to_server(SyncEnhancer(), server)
     assert server.add_insecure_port(f"127.0.0.1:{port}") == port

@@ -80,5 +80,9 @@ services:
       - no-new-privileges:true
 
 secrets:
+  # Docker Compose rejects `environment:` secrets for a service with
+  # `read_only: true` ("`file` is the sole supported option"). Provide the
+  # file yourself via FASTENHANCER_TOKEN_FILE or let `make token-file` write
+  # the default — see the Secrets section of docs/operations.md.
   fastenhancer_api_token:
-    environment: FASTENHANCER_API_TOKEN
+    file: ${FASTENHANCER_TOKEN_FILE:-./.secrets/api-token}

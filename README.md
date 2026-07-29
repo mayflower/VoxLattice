@@ -51,9 +51,13 @@ VOXLATTICE_IMAGE=ghcr.io/mayflower/voxlattice:latest
 Start the published image without a local build:
 
 ```bash
+make token-file
 docker compose --env-file deploy/.env -f deploy/docker-compose.yml pull fastenhancer
 docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --no-build --wait
 ```
+
+`make token-file` writes the bearer token to the file the Compose secret
+mounts; the stack cannot start without it.
 
 Release images are also available under their full version and immutable Git
 SHA tags. Use a version tag instead of `latest` for reproducible deployments.
@@ -148,11 +152,11 @@ included gRPC client at a remote endpoint with `--endpoint`, `--tls`, and
 `--api-key` to measure a deployed service instead of the local Compose one.
 
 The real-time LiveKit plugin has a stricter requirement than this offline
-check: for each output interval it waits only `response_wait_ms` (12 ms by
+check: for each output interval it allows only `output_delay_ms` (12 ms by
 default) for the enhanced samples before emitting the raw input. The server's
 per-hop latency must fit inside that window, and on a shared GPU the scheduling
 overhead can push it well past 12 ms even though inference itself is ~11 ms. Run
-the agent close to the server and raise `response_wait_ms` to match the measured
+the agent close to the server and raise `output_delay_ms` to match the measured
 hop latency, or reduce GPU contention. See
 [LiveKit integration](docs/livekit.md#delay-and-fallback-behavior).
 

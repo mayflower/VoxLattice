@@ -116,11 +116,16 @@ FastEnhancer introduces a fixed 256-sample delay at 16 kHz, or 16 ms. The first
 processed frame can therefore contain fewer samples than the input frame. A
 continuous stream catches up while preserving the original sample timeline.
 
-For each output interval, the processor waits up to `response_wait_ms` for the
-matching enhanced samples. If they are unavailable, it returns raw samples from
-the same absolute interval. Late responses and responses from a replaced gRPC
-generation are discarded; enhanced audio is never paired with the wrong input
-time range.
+On top of that, the processor holds its output back by `output_delay_ms`, and
+that lag is the budget the server gets to answer. It never waits for a
+response: `rtc.FrameProcessor._process` is synchronous and LiveKit calls it
+inline on the agent's event loop, so a wait there stalls TTS playout, barge-in
+and RPC handling for every frame of the call. Reading an interval that is
+already `output_delay_ms` old gives the server the same budget at the same
+end-to-end latency, without ever blocking the caller. If the enhanced samples
+are still unavailable, the processor returns raw samples from the same absolute
+interval. Late responses and responses from a replaced gRPC generation are
+discarded; enhanced audio is never paired with the wrong input time range.
 
 Setting `processor.enabled = False` cancels the current remote stream and
 returns subsequent frames raw. Re-enabling starts a new remote state. Closing
@@ -130,19 +135,22 @@ samples; normal trailing silence advances and emits that interval first.
 
 ## Tuning
 
-The most relevant client setting is `response_wait_ms`:
+The most relevant client setting is `output_delay_ms`:
 
-- Lower values reduce blocking but increase raw fallback during latency spikes.
+- Lower values reduce added latency but increase raw fallback during latency spikes.
 - Higher values allow more remote jitter but directly add to processing latency.
+
+Neither direction costs event-loop time, so this is a latency-versus-quality
+trade-off only.
 
 Set it from the server's measured per-hop latency, not from a guess. The server
 exposes that latency as the `fastenhancer_hop_end_to_end_seconds` histogram; if
-the average or high percentiles exceed `response_wait_ms`, every interval falls
+the average or high percentiles exceed `output_delay_ms`, every interval falls
 back to raw and `raw_fallback_samples` dominates `enhanced_samples` even though
 the server is enhancing correctly. Inference is only part of that hop: on a GPU
 shared through NVIDIA MPS, scheduling and queueing can raise the end-to-end hop
 to several times the inference time, so the 12 ms default is frequently too low.
-Run the agent close to the server, raise `response_wait_ms` to cover the hop, or
+Run the agent close to the server, raise `output_delay_ms` to cover the hop, or
 give the server less-contended GPU capacity.
 
 `max_buffer_ms` and `max_request_queue_ms` are safety bounds, not capacity
