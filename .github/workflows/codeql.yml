@@ -19,6 +19,7 @@ concurrency:
 jobs:
   analyze:
     name: Analyze Python
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: mayflower-k8s-runners
     timeout-minutes: 30
     permissions:
